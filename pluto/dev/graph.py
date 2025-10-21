@@ -1,30 +1,60 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-data = np.fromfile("/home/plutoSDR/pluto/dev/symbols.pcm", dtype=np.int16)
+rx = np.fromfile(f"/home/plutoSDR/sdr/pluto/dev/rx.pcm", dtype=np.int16)
+tx = np.fromfile(f"/home/plutoSDR/sdr/pluto/dev/tx.pcm", dtype=np.int16)
 
-samples = []
+rx_samples = []
+tx_samples = []
 
-for x in range(0, len(data), 2):
-    samples.append(data[x] + 1j * data[x+1])
+for x in range(0, len(rx), 2):
+    rx_samples.append(rx[x] + 1j * rx[x+1])
 
-ampl = np.abs(samples)
-phase = np.angle(samples)
-time = np.arange(len(samples))
+for x in range(0, len(rx), 2):
+    tx_samples.append(tx[x] + 1j * tx[x+1])
+
+rx_ampl = np.abs(rx_samples)
+rx_phase = np.angle(rx_samples)
+rx_time = np.arange(len(rx_samples))
+
+rx_ampl = np.abs(tx_samples)
+rx_phase= np.angle(tx_samples)
+rx_time = np.arange(len(tx_samples))
 
 # plot
 plt.subplot(3,1,1)
-plt.plot(time, ampl)
+plt.legend
+plt.plot(rx_time, rx_ampl)
 plt.grid(True)
 
 plt.subplot(3,1,2)
-plt.plot(time, phase)
+plt.legend
+plt.plot(rx_time, rx_phase)
 plt.grid(True)
 
 
 plt.subplot(3,1,3)
-plt.plot(time, data[0::2])
-plt.plot(time, data[1::2])
+plt.legend
+plt.plot(rx_time, rx[0::2])
+plt.plot(rx_time, rx[1::2])
 plt.grid(True)
 
+
+# plot
+plt.subplot(3,1,1)
+plt.legend
+plt.plot(rx_time, rx_ampl)
+plt.grid(True)
+
+plt.subplot(3,1,2)
+plt.legend
+plt.plot(rx_time, rx_phase)
+plt.grid(True)
+
+
+plt.subplot(3,1,3)
+plt.legend
+plt.plot(rx_time, tx[0::2])
+plt.plot(rx_time, tx[1::2])
+plt.grid(True)
 plt.show()
