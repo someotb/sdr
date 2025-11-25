@@ -40,7 +40,7 @@ struct SDRConfig init(){
     SoapySDRKwargs_clear(&args);
 
     config.sample_rate = 1e6;
-    config.carrier_freq = 600e6;
+    config.carrier_freq = 870e6;
 
     SoapySDRDevice_setSampleRate(config.sdr, SOAPY_SDR_RX, 0, config.sample_rate);
     SoapySDRDevice_setFrequency(config.sdr, SOAPY_SDR_RX, 0, config.carrier_freq, NULL);
@@ -123,7 +123,7 @@ int main(){
     FILE *rx = fopen("rx.pcm", "wb");
     if (!tx || !rx) { perror("fopen"); return -1; }
 
-    int n = 20;
+    int n = 1920;
     int16_t *bits = (int16_t*)malloc(n * sizeof(int16_t));
     for (int i = 0; i < n; i++) bits[i] = rand() % 2;
 
