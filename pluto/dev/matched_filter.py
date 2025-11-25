@@ -15,6 +15,7 @@ Q = np.imag(samples)
 
 i_convolve = np.convolve(I, impulse)
 q_convolve = np.convolve(Q, impulse)
+
 i_con_dec = []
 q_con_dec = []
 
@@ -25,8 +26,13 @@ for i in range(-1, len(i_convolve), 10):
 # Убираем шумы
 i_con_dec = [x for x in i_con_dec if not (abs(x) <= 1)]
 q_con_dec = [x for x in q_con_dec if not (abs(x) <= 1)]
-    
+
+plt.subplot(2,1,1)
 plt.scatter(i_con_dec, q_con_dec)
 plt.axhline()
 plt.axvline()
+plt.subplot(2,1,2)
+plt.plot(np.arange(len(i_convolve)), i_convolve)
+plt.plot(np.arange(len(q_convolve)), q_convolve)
+
 plt.show()
