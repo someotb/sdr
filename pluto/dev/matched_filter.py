@@ -30,7 +30,10 @@ offset, list_offset = gardner(i_convolve + 1j * q_convolve)
 print(offset)
 
 plt.figure()
+plt.title("offset")
 plt.plot(np.arange(len(list_offset)), list_offset)
+plt.ylim([-20, 20])
+plt.xlim([4060, 4560])
 
 for i in range(offset, len(i_convolve), 10):
     i_con_dec.append(i_convolve[i])
