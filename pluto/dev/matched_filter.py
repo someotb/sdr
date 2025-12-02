@@ -32,14 +32,12 @@ offset, list_offset, list_err = gardner(i_convolve + 1j * q_convolve)
 print(f"offset - {offset}") 
 
 plt.figure()
-plt.title("err")
-plt.plot(np.arange(len(list_err)), list_err)
+plt.title("offset/err")
+plt.plot(np.arange(len(list_offset)), list_offset, label = "offset")
+plt.plot(np.arange(len(list_err)), list_err, label = "err")
+plt.legend()
 plt.grid()
 
-plt.figure()
-plt.title("offset")
-plt.plot(np.arange(len(list_offset)), list_offset)
-plt.grid()
 # plt.ylim([-20, 20])
 # plt.xlim([4060, 4560])
 

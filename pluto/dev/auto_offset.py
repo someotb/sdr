@@ -8,8 +8,8 @@ def gardner(complex_symbols_saw):
     Nsp = 10 # Samples per symbol
     zeta = np.sqrt(2)/2
     teta = (BnTs/Nsp)/(zeta + 1/(4*zeta))
-    s = complex_symbols_saw[5000:5500]
-    Kp = 1
+    s = complex_symbols_saw[5000:6000]
+    Kp = 2
     K1 = (-4 * zeta * teta)/((1 + 2 * zeta * teta + teta ** 2) * Kp)
     K2 = (-4 * teta ** 2)/((1 + 2 * zeta * teta + teta ** 2) * Kp)
     list_of_offset = []
