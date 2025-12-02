@@ -1,4 +1,5 @@
 import numpy as np
+
 def gardner(complex_symbols_saw):
     p1 = 0
     p2 = 0
@@ -7,22 +8,22 @@ def gardner(complex_symbols_saw):
     Nsp = 10 # Samples per symbol
     zeta = np.sqrt(2)/2
     teta = (BnTs/Nsp)/(zeta + 1/(4*zeta))
-    css = complex_symbols_saw
-    Kp = 0.002
+    s = complex_symbols_saw[5000:5500]
+    Kp = 1
     K1 = (-4 * zeta * teta)/((1 + 2 * zeta * teta + teta ** 2) * Kp)
     K2 = (-4 * teta ** 2)/((1 + 2 * zeta * teta + teta ** 2) * Kp)
     list_of_offset = []
+    list_of_err = []
     
-    for n in range(0, len(css)-22):
-        err = (np.real(css[n + Nsp + Nsp]) - np.real(css[n + Nsp])) * np.real(css[n + Nsp + Nsp//2]) + (np.imag(css[n + Nsp + Nsp]) - np.imag(css[n + Nsp])) * np.imag(css[n + Nsp + Nsp//2])
-        err = np.real(err)
+    for i in range(0, len(s)//10-1):
+        n = offset
+        err = (np.real(s[n + Nsp + Nsp*i]) - np.real(s[n + Nsp*i])) * np.real(s[n + Nsp//2 + Nsp*i])
+        err += (np.imag(s[n + Nsp + Nsp*i]) - np.imag(s[n + Nsp*i])) * np.imag(s[n + Nsp//2 + Nsp*i])
+        list_of_err.append(err)
         p1 = err * K1
         p2 = p2 + p1 + err * K2
-        while p2 > 1:
-            p2 = p2 - 1
-        while p2 < -1:
-            p2 = p2 + 1
-        offset = np.round(p2 * Nsp)
+        p2 %= 1
+            
+        offset = int(np.round(p2 * Nsp))
         list_of_offset.append(offset)
-        
-    return int(offset), list_of_offset
+    return int(offset), list_of_offset, list_of_err
