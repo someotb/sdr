@@ -140,7 +140,7 @@ int main(){
     filter(symbols_ups, len_symbols_ups, impulse, L);
     // Show_Array("Символы", symbols_ups, len_symbols_ups);
 
-    int16_t *tx_samples = (int16_t*)malloc(2 * config.tx_mtu * sizeof(int16_t));
+    int16_t *tx_samples = (int16_t*)calloc(2 * config.tx_mtu, sizeof(int16_t));
     for (size_t i = 0; i < (size_t)config.tx_mtu; i++) {
         tx_samples[2*i] = (int16_t)((real(symbols_ups[i])) * 1000) << 4;
         tx_samples[2*i + 1] = (int16_t)((imag(symbols_ups[i])) * 1000) << 4;
@@ -152,7 +152,7 @@ int main(){
     const long long timeoutUs = 10000000;
     long long last_time = 0;
 
-    size_t count_of_buffs = 10;
+    size_t count_of_buffs = 40;
 
     for (size_t i = 0; i < count_of_buffs; ++i){
         void *rx_buffs[] = {config.rx_buffer};
