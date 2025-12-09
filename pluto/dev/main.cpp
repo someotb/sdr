@@ -160,7 +160,7 @@ int main(){
 
         int sr = SoapySDRDevice_readStream(config.sdr, config.rxStream, rx_buffs, config.rx_mtu, &flags, &timeNs, timeoutUs);
         if (sr <= 0){
-            fprintf(stderr, "Initial RX failed\n");
+            fprintf(stderr, "Initial RX failed\n"); 
             break;
         }   
 
