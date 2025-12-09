@@ -20,7 +20,6 @@ struct SDRConfig {
     size_t tx_mtu;
     int sample_rate;
     int carrier_freq;
-    int16_t *tx_buff;
     int16_t *rx_buffer;
 };
 
@@ -64,7 +63,6 @@ struct SDRConfig init(){
     config.rx_mtu = SoapySDRDevice_getStreamMTU(config.sdr, config.rxStream);
     config.tx_mtu = SoapySDRDevice_getStreamMTU(config.sdr, config.txStream);
 
-    config.tx_buff = (int16_t*)calloc(2 * config.tx_mtu, sizeof(int16_t));
     config.rx_buffer = (int16_t*)calloc(2 * config.rx_mtu, sizeof(int16_t));
 
     return config;
@@ -119,41 +117,41 @@ void filter(complex<double> *symbols_ups, int len_symbols_ups, complex<double> *
 int main(){
     struct SDRConfig config = init();
 
+    int n = 1920;
+    int L = 10;
+    int len_symbols = n / 2;
+    int len_symbols_ups = len_symbols * L;
+    size_t count_of_buffs = 40;
+    const long long timeoutUs = 10000000;
+    long long last_time = 0;
+
     FILE *tx = fopen("tx.pcm", "wb");
     FILE *rx = fopen("rx.pcm", "wb");
     if (!tx || !rx) { perror("fopen"); return -1; }
 
-    int n = 1920;
     int16_t *bits = (int16_t*)malloc(n * sizeof(int16_t));
-    for (int i = 0; i < n; i++) bits[i] = rand() % 2;
-
-    int len_symbols = n / 2;
     complex<double> *symbols = (complex<double>*)malloc(len_symbols * sizeof(complex<double>));
-    int L = 10;
-    int len_symbols_ups = len_symbols * L;
     complex<double> *symbols_ups = (complex<double>*)malloc(len_symbols_ups * sizeof(complex<double>));
     complex<double> impulse[L];
+    int16_t *tx_samples = (int16_t*)calloc(2 * config.tx_mtu, sizeof(int16_t));
+
+
+    for (int i = 0; i < n; i++) bits[i] = rand() % 2;
     for (int i = 0; i < L; i++) impulse[i] = 1.0;
 
     Mapper(bits, n, symbols);
     UpSampler(symbols, len_symbols, symbols_ups, L);
     filter(symbols_ups, len_symbols_ups, impulse, L);
-    // Show_Array("Символы", symbols_ups, len_symbols_ups);
 
-    int16_t *tx_samples = (int16_t*)calloc(2 * config.tx_mtu, sizeof(int16_t));
+    // TX SAMPLES
     for (size_t i = 0; i < (size_t)config.tx_mtu; i++) {
         tx_samples[2*i] = (int16_t)((real(symbols_ups[i])) * 1000) << 4;
         tx_samples[2*i + 1] = (int16_t)((imag(symbols_ups[i])) * 1000) << 4;
     }
     
-    // memcpy(config.tx_buff, tx_samples, 2 * len_symbols_ups * sizeof(int16_t));
     fwrite(tx_samples, sizeof(int16_t), 2 * len_symbols_ups, tx);
 
-    const long long timeoutUs = 10000000;
-    long long last_time = 0;
-
-    size_t count_of_buffs = 40;
-
+    // RX SAMPLES
     for (size_t i = 0; i < count_of_buffs; ++i){
         void *rx_buffs[] = {config.rx_buffer};
         const void *tx_buffs[] = {tx_samples};
@@ -183,7 +181,6 @@ int main(){
     SoapySDRDevice_closeStream(config.sdr, config.txStream);
     SoapySDRDevice_unmake(config.sdr);
 
-    free(config.tx_buff);
     free(config.rx_buffer);
     free(bits);
     free(symbols);
