@@ -7,12 +7,12 @@ Choose 1 - Rx""")
 answer = int(input())
 
 if answer == 1:
-    nx = np.fromfile(f"/home/someotb/Files/Code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
+    nx = np.fromfile(f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
 else:
-    nx = np.fromfile(f"/home/someotb/Files/Code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16)
+    nx = np.fromfile(f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16)
 
-rx = np.fromfile(f"/home/someotb/Files/Code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
-tx = np.fromfile(f"/home/someotb/Files/Code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16)
+rx = np.fromfile(f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
+tx = np.fromfile(f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16)
 print(f"RX: {rx}\nTX: {tx}")
 
 samples = []
@@ -39,7 +39,7 @@ time = np.arange(len(samples))
 
 # plt.subplot(3,1,3)
 plt.plot(time, nx[0::2])
-# plt.plot(time, nx[1::2])
+plt.plot(time, nx[1::2])
 plt.grid(True)
 plt.tight_layout()
 plt.title("Real and Imag parts")

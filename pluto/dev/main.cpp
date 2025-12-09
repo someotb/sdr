@@ -23,12 +23,12 @@ struct SDRConfig {
     int16_t *rx_buffer;
 };
 
-struct SDRConfig init(){
+struct SDRConfig init(char *usb){
     struct SDRConfig config = {};
     SoapySDRKwargs args = {};
     SoapySDRKwargs_set(&args, "driver", "plutosdr");
     if (1) {
-        SoapySDRKwargs_set(&args, "uri", "usb:");
+        SoapySDRKwargs_set(&args, "uri", usb);
     } else {
         SoapySDRKwargs_set(&args, "uri", "ip:192.168.2.1");
     }
@@ -39,7 +39,7 @@ struct SDRConfig init(){
     SoapySDRKwargs_clear(&args);
 
     config.sample_rate = 1e6;
-    config.carrier_freq = 870e6;
+    config.carrier_freq = 800e6;
 
     SoapySDRDevice_setSampleRate(config.sdr, SOAPY_SDR_RX, 0, config.sample_rate);
     SoapySDRDevice_setFrequency(config.sdr, SOAPY_SDR_RX, 0, config.carrier_freq, NULL);
@@ -114,15 +114,15 @@ void filter(complex<double> *symbols_ups, int len_symbols_ups, complex<double> *
     memcpy(symbols_ups, sum.data(), len_symbols_ups * sizeof(complex<double>));
 }
 
-int main(){
-    struct SDRConfig config = init();
+int main(int argc, char *argv[]){
+    struct SDRConfig config = init(argv[1]);
 
     int n = 1920;
     int L = 10;
     int len_symbols = n / 2;
     int len_symbols_ups = len_symbols * L;
-    size_t count_of_buffs = 40;
-    const long long timeoutUs = 10000000;
+    size_t count_of_buffs = 4000000;
+    const long long timeoutUs = 400000;
     long long last_time = 0;
 
     FILE *tx = fopen("tx.pcm", "wb");
@@ -133,8 +133,7 @@ int main(){
     complex<double> *symbols = (complex<double>*)malloc(len_symbols * sizeof(complex<double>));
     complex<double> *symbols_ups = (complex<double>*)malloc(len_symbols_ups * sizeof(complex<double>));
     complex<double> impulse[L];
-    int16_t *tx_samples = (int16_t*)calloc(2 * config.tx_mtu, sizeof(int16_t));
-
+    int16_t *tx_samples = (int16_t*)calloc(2 * len_symbols_ups, sizeof(int16_t));
 
     for (int i = 0; i < n; i++) bits[i] = rand() % 2;
     for (int i = 0; i < L; i++) impulse[i] = 1.0;
@@ -144,7 +143,7 @@ int main(){
     filter(symbols_ups, len_symbols_ups, impulse, L);
 
     // TX SAMPLES
-    for (size_t i = 0; i < (size_t)config.tx_mtu; i++) {
+    for (size_t i = 0; i < (size_t)len_symbols_ups; i++) {
         tx_samples[2*i] = (int16_t)((real(symbols_ups[i])) * 1000) << 4;
         tx_samples[2*i + 1] = (int16_t)((imag(symbols_ups[i])) * 1000) << 4;
     }
@@ -154,25 +153,30 @@ int main(){
     // RX SAMPLES
     for (size_t i = 0; i < count_of_buffs; ++i){
         void *rx_buffs[] = {config.rx_buffer};
-        const void *tx_buffs[] = {tx_samples};
+        int off = (i<10) ? i : 0;
+        const void *tx_buffs[] = {tx_samples + i * 1920 * 2};
         int flags = 0;
         long long timeNs = 0;
 
-        int sr = SoapySDRDevice_readStream(config.sdr, config.rxStream, rx_buffs, config.rx_mtu, &flags, &timeNs, timeoutUs);
-        if (sr <= 0){
-            fprintf(stderr, "Initial RX failed\n"); 
-            break;
+        if (strcmp(argv[1],"usb:1.2.5") == 0) {
+            int sr = SoapySDRDevice_readStream(config.sdr, config.rxStream, rx_buffs, config.rx_mtu, &flags, &timeNs, timeoutUs);
+            if (sr <= 0){
+                fprintf(stderr, "Initial RX failed\n");
+                break;
+            fwrite(rx_buffs[0], sizeof(int16_t), 2 * config.rx_mtu, rx);
+            }
         }   
 
-        printf("-Send: %ld, Samples: %d, Flags: %d, Time: %lld, Diff: %lld\n", i, sr, flags, timeNs, timeNs - last_time);
-        last_time = timeNs;
+        // printf("-Send: %ld, Samples: %d, Flags: %d, Time: %lld, Diff: %lld\n", i, sr, flags, timeNs, timeNs - last_time);
+        // last_time = timeNs;
 
         long long tx_time = timeNs + (4 * 1000 * 1000); // 4ms в будущее
         flags = SOAPY_SDR_HAS_TIME;
 
-        int st = SoapySDRDevice_writeStream(config.sdr, config.txStream, tx_buffs, config.tx_mtu, &flags, tx_time, timeoutUs);
-        if (st != (int)config.tx_mtu) fprintf(stderr, "TX short write: expected %zu, got %d\n", config.tx_mtu, st);
-        fwrite(rx_buffs[0], sizeof(int16_t), 2 * config.rx_mtu, rx);
+        if (strcmp(argv[1],"usb:1.4.5") == 0) {    
+            int st = SoapySDRDevice_writeStream(config.sdr, config.txStream, tx_buffs, config.tx_mtu, &flags, tx_time, timeoutUs);
+            if (st != (int)config.tx_mtu) fprintf(stderr, "TX short write: expected %zu, got %d\n", config.tx_mtu, st);
+        }
     }
 
     SoapySDRDevice_deactivateStream(config.sdr, config.rxStream, 0, 0);
