@@ -147,7 +147,7 @@ int main(int argc, char *argv[]){
         tx_samples[2*i] = (int16_t)((real(symbols_ups[i])) * 1000) << 4;
         tx_samples[2*i + 1] = (int16_t)((imag(symbols_ups[i])) * 1000) << 4;
     }
-    
+
     fwrite(tx_samples, sizeof(int16_t), 2 * len_symbols_ups, tx);
 
     // RX SAMPLES
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]){
                 break;
             fwrite(rx_buffs[0], sizeof(int16_t), 2 * config.rx_mtu, rx);
             }
-        }   
+        }
 
         // printf("-Send: %ld, Samples: %d, Flags: %d, Time: %lld, Diff: %lld\n", i, sr, flags, timeNs, timeNs - last_time);
         // last_time = timeNs;
@@ -173,7 +173,7 @@ int main(int argc, char *argv[]){
         long long tx_time = timeNs + (4 * 1000 * 1000); // 4ms в будущее
         flags = SOAPY_SDR_HAS_TIME;
 
-        if (strcmp(argv[1],"usb:1.4.5") == 0) {    
+        if (strcmp(argv[1],"usb:1.4.5") == 0) {
             int st = SoapySDRDevice_writeStream(config.sdr, config.txStream, tx_buffs, config.tx_mtu, &flags, tx_time, timeoutUs);
             if (st != (int)config.tx_mtu) fprintf(stderr, "TX short write: expected %zu, got %d\n", config.tx_mtu, st);
         }

@@ -7,18 +7,28 @@ Choose 1 - Rx""")
 answer = int(input())
 
 if answer == 1:
-    nx = np.fromfile(f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
+    nx = np.fromfile(
+        f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm",
+        dtype=np.int16,
+    )
 else:
-    nx = np.fromfile(f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16)
+    nx = np.fromfile(
+        f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/tx.pcm",
+        dtype=np.int16,
+    )
 
-rx = np.fromfile(f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
-tx = np.fromfile(f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16)
+rx = np.fromfile(
+    f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16
+)
+tx = np.fromfile(
+    f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16
+)
 print(f"RX: {rx}\nTX: {tx}")
 
 samples = []
 
 for x in range(0, len(nx), 2):
-    samples.append(nx[x] + 1j * nx[x+1])
+    samples.append(nx[x] + 1j * nx[x + 1])
 
 ampl = np.abs(samples)
 phase = np.angle(samples)

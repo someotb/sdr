@@ -1,6 +1,7 @@
-import numpy as np
 import librosa
+import numpy as np
 from pydub import AudioSegment
+
 
 def mp3_to_pcm(src_path, dst_path, sample_rate=44100):
     audio_data, sr = librosa.load(src_path, sr=sample_rate, mono=False)
@@ -9,15 +10,17 @@ def mp3_to_pcm(src_path, dst_path, sample_rate=44100):
     pcm_array = np.int16(audio_data * 32767)
     pcm_array.tofile(dst_path)
 
+
 def pcm_to_mp3(pcm_path, output_path, channels=2, sample_rate=44100, bitrate="160k"):
     raw_audio = np.fromfile(pcm_path, dtype=np.int16)
     sound = AudioSegment(
         data=raw_audio.tobytes(),
         sample_width=2,
         frame_rate=sample_rate,
-        channels=channels
+        channels=channels,
     )
     sound.export(output_path, format="mp3", bitrate=bitrate)
+
 
 print("""PCM->MP3: 0
 MP3->PCM: 1""")

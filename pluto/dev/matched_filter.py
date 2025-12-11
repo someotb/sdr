@@ -1,13 +1,13 @@
-from matplotlib import pyplot as plt
 import numpy as np
 from auto_offset import gardner
+from matplotlib import pyplot as plt
 
 rx = np.fromfile(f"/home/someotb/Files/Code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
 
 samples = []
 
 for x in range(0, len(rx), 2):
-    samples.append((rx[x] + 1j * rx[x+1])/np.max(rx))
+    samples.append((rx[x] + 1j * rx[x + 1]) / np.max(rx))
 
 plt.figure()
 plt.scatter(np.real(samples), np.imag(samples))
@@ -29,12 +29,12 @@ list_offset = []
 list_err = []
 
 offset, list_offset, list_err = gardner(i_convolve + 1j * q_convolve)
-print(f"offset - {offset}") 
+print(f"offset - {offset}")
 
 plt.figure()
 plt.title("offset/err")
-plt.plot(np.arange(len(list_offset)), list_offset, label = "offset")
-plt.plot(np.arange(len(list_err)), list_err, label = "err")
+plt.plot(np.arange(len(list_offset)), list_offset, label="offset")
+plt.plot(np.arange(len(list_err)), list_err, label="err")
 plt.legend()
 plt.grid()
 
@@ -54,17 +54,17 @@ for i in range(offset, len(i_convolve), 10):
 
 plt.figure()
 plt.tight_layout()
-plt.subplot(2,1,1)
+plt.subplot(2, 1, 1)
 plt.title("Сигнальное созвездие")
 plt.scatter(i_con_dec, q_con_dec)
 plt.axhline()
 plt.axvline()
-plt.subplot(2,1,2)
+plt.subplot(2, 1, 2)
 plt.title("I, Q")
 plt.grid()
 plt.xlim([5000, 5500])
 plt.ylim([-30, 30])
-plt.scatter(np.arange(len(i_convolve)), i_convolve, label = "I part")
-plt.scatter(np.arange(len(q_convolve)), q_convolve, label = "Q part")
+plt.scatter(np.arange(len(i_convolve)), i_convolve, label="I part")
+plt.scatter(np.arange(len(q_convolve)), q_convolve, label="Q part")
 plt.legend()
 plt.show()
