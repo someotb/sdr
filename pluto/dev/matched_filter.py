@@ -2,12 +2,12 @@ import numpy as np
 from auto_offset import gardner
 from matplotlib import pyplot as plt
 
-rx = np.fromfile(f"/home/someotb/Files/Code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
+rx = np.fromfile(f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)[0:1500000] # 2937360*2:2939644*2
 
 samples = []
 
 for x in range(0, len(rx), 2):
-    samples.append((rx[x] + 1j * rx[x + 1]) / np.max(rx))
+    samples.append((rx[x] + 1j * rx[x + 1]))
 
 plt.figure()
 plt.scatter(np.real(samples), np.imag(samples))
@@ -40,10 +40,6 @@ plt.grid()
 
 # plt.ylim([-20, 20])
 # plt.xlim([4060, 4560])
-
-for i in range(offset, len(i_convolve), 10):
-    i_con_dec.append(i_convolve[i])
-    q_con_dec.append(q_convolve[i])
 
 # Убираем шумы
 # i_con_dec = [x for x in i_con_dec if not (abs(x) <= 1)]

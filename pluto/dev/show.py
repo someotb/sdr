@@ -1,12 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-print("""Choose 0 - Tx
-Choose 1 - Rx""")
+print("""Choose 1 - Tx
+Choose 2 - Rx""")
 
 answer = int(input())
 
-if answer == 1:
+if answer == 2:
     nx = np.fromfile(
         f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm",
         dtype=np.int16,
@@ -23,7 +23,11 @@ rx = np.fromfile(
 tx = np.fromfile(
     f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16
 )
-print(f"RX: {rx}\nTX: {tx}")
+if len(rx) > 0:
+    print(f"RX MAX: {np.max(rx)} RX MIN: {np.min(rx)}\n")
+
+if len(tx) > 0:
+    print(f"TX MAX: {np.max(tx)} TX MIN: {np.min(tx)}\n")
 
 samples = []
 
@@ -45,7 +49,6 @@ time = np.arange(len(samples))
 # plt.grid(True)
 # plt.tight_layout()
 # plt.title("Phase")
-
 
 # plt.subplot(3,1,3)
 plt.plot(time, nx[0::2])
