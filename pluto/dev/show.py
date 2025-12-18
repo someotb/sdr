@@ -8,21 +8,17 @@ answer = int(input())
 
 if answer == 2:
     nx = np.fromfile(
-        f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm",
+        f"/home/someotb/Code/sdr/pluto/dev/build/rx.pcm",
         dtype=np.int16,
     )
 else:
     nx = np.fromfile(
-        f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/tx.pcm",
+        f"/home/someotb/Code/sdr/pluto/dev/build/tx.pcm",
         dtype=np.int16,
     )
 
-rx = np.fromfile(
-    f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16
-)
-tx = np.fromfile(
-    f"/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16
-)
+rx = np.fromfile(f"/home/someotb/Code/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
+tx = np.fromfile(f"/home/someotb/Code/sdr/pluto/dev/build/tx.pcm", dtype=np.int16)
 if len(rx) > 0:
     print(f"RX MAX: {np.max(rx)} RX MIN: {np.min(rx)}\n")
 
