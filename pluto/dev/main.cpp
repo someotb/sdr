@@ -7,11 +7,10 @@
 #include <stdint.h>
 #include <complex.h>
 #include <math.h>
-#include <map>
-#include <string>
 #include <vector>
 #include <string.h>
 #include <algorithm>
+#include "modulation.h"
 
 using namespace std;
 
@@ -27,7 +26,7 @@ constexpr int LEN_SYMBOLS_UPS = LEN_SYMBOLS * UPSAMPLE;
 constexpr int SCALE_FACTOR = 1000;
 constexpr int BIT_SHIFT = 4;
 
-constexpr size_t N_BUFFERS = 4000000;
+constexpr size_t N_BUFFERS = 40000;
 constexpr long long TIMEOUT = 400000;
 constexpr long long TX_DELAY = 4000000;
 
@@ -81,51 +80,6 @@ struct SDRConfig init(char *usb){
     return config;
 }
 
-const complex<double> i0 (0, 0);
-const complex<double> i1 (1, 1);
-const complex<double> i2 (-1, 1);
-const complex<double> i3 (-1, -1);
-const complex<double> i4 (1, -1);
-
-static map<string, complex<double>> qpsk_map = {
-    {"00", i1},
-    {"01", i2},
-    {"11", i3},
-    {"10", i4}
-};
-
-void Mapper(const vector<int16_t>& bits, vector<complex<double>>& symbols) {
-    symbols.resize(bits.size() / 2);
-    string pair_bits;
-    for (size_t i = 0; i < bits.size(); i += 2) {
-        pair_bits = to_string(bits[i]) + to_string(bits[i+1]);
-        symbols[i/2] = qpsk_map[pair_bits];
-    }
-}
-
-void UpSampler(const vector<complex<double>>& symbols, vector<complex<double>>& symbols_ups, int L) {
-    size_t len_symbols = symbols.size();
-    symbols_ups.assign(len_symbols * L, i0);
-    for (size_t i = 0; i < len_symbols; i++) {
-        symbols_ups[i * L] = symbols[i];
-    }
-}
-
-void filter(vector<complex<double>>& symbols_ups, const vector<complex<double>>& impulse) {
-    size_t n = symbols_ups.size();
-    size_t L = impulse.size();
-    vector<complex<double>> output(n, 0.0);
-
-    for (size_t i = 0; i < n; i++) {
-        size_t max_j = min(L, i + 1);
-        for (size_t j = 0; j < max_j; j++) {
-            output[i] += impulse[j] * symbols_ups[i - j];
-        }
-    }
-
-    symbols_ups.swap(output);
-}
-
 int main(int argc, char *argv[]){
     (void) argc;
     struct SDRConfig config = init(argv[1]);
@@ -135,14 +89,14 @@ int main(int argc, char *argv[]){
     if (!tx || !rx) { perror("fopen"); return -1; }
 
     vector<int16_t> bits(N_BITS);
-    vector<complex<double>> symbols;
-    vector<complex<double>> symbols_ups;
+    vector<complex<double>> symbols(LEN_SYMBOLS);
+    vector<complex<double>> symbols_ups(LEN_SYMBOLS_UPS);
     vector<complex<double>> impulse(UPSAMPLE, 1.0);
     vector<int16_t> tx_samples(2 * LEN_SYMBOLS_UPS);
 
     for (int i = 0; i < N_BITS; i++) bits[i] = rand() % 2;
 
-    Mapper(bits, symbols);
+    modulate(bits, symbols, ModulationType::QPSK);
     UpSampler(symbols, symbols_ups, UPSAMPLE);
     filter(symbols_ups, impulse);
 

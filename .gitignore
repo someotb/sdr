@@ -10,5 +10,6 @@
 *.pyc
 
 pluto/dev/build
-.vscode
+pluto/dev/.cache
 
+.vscode
