@@ -9,7 +9,6 @@
 #include <math.h>
 #include <vector>
 #include <string.h>
-#include <algorithm>
 #include "modulation.h"
 
 using namespace std;
