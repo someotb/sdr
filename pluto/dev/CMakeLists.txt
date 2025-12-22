@@ -13,6 +13,7 @@ find_package(SoapySDR REQUIRED)
 set(MAIN_SOURCE_FILES
     main.cpp
     src/modulation.cpp
+    src/sdr.cpp
 )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
