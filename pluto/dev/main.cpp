@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <complex.h>
 #include <math.h>
+#include <iostream>
 #include <vector>
 #include <string.h>
 #include "modulation.h"
@@ -21,7 +22,7 @@ constexpr int LEN_SYMBOLS_UPS = LEN_SYMBOLS * UPSAMPLE;
 constexpr int SCALE_FACTOR = 1000;
 constexpr int BIT_SHIFT = 4;
 
-constexpr size_t N_BUFFERS = 100;
+constexpr size_t N_BUFFERS = 100000;
 constexpr long long TIMEOUT = 400000;
 constexpr long long TX_DELAY = 4000000;
 
@@ -42,7 +43,7 @@ int main(int argc, char *argv[]){
 
     for (int i = 0; i < N_BITS; i++) bits[i] = rand() % 2;
 
-    modulate(bits, symbols, ModulationType::QAM16);
+    modulate(bits, symbols, ModulationType::BPSK);
     UpSampler(symbols, symbols_ups, UPSAMPLE);
     filter(symbols_ups, impulse);
 
@@ -51,7 +52,8 @@ int main(int argc, char *argv[]){
         tx_samples[2*i+1] = (imag(symbols_ups[i]) * 16000);
     }
 
-    for (size_t i = 0; i < N_BUFFERS; ++i){
+    for (size_t i = 0; i < N_BUFFERS; ++i) {
+        cout << i << " buffer" << endl;
         void *rx_buffs[] = {sdr.rx_buffer};
         const void *tx_buffs[] = {tx_samples.data()};
         int flags = 0;
@@ -63,6 +65,7 @@ int main(int argc, char *argv[]){
 
         long long tx_time = timeNs + TX_DELAY;
         flags = SOAPY_SDR_HAS_TIME;
+
         int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
         (void)st;
         fwrite(tx_buffs[0], sizeof(int16_t), 2 * sdr.tx_mtu, tx);
