@@ -19,8 +19,6 @@ constexpr int N_BITS = 1920;
 constexpr int UPSAMPLE = 10;
 constexpr int LEN_SYMBOLS = N_BITS / 2;
 constexpr int LEN_SYMBOLS_UPS = LEN_SYMBOLS * UPSAMPLE;
-constexpr int SCALE_FACTOR = 1000;
-constexpr int BIT_SHIFT = 4;
 
 constexpr size_t N_BUFFERS = 100000;
 constexpr long long TIMEOUT = 400000;
