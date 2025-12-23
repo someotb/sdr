@@ -1,11 +1,11 @@
 #include "modulation.h"
 
+// According to 3GPP TS 38.211 section 5.1.3:
 void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, ModulationType modulation_type) {
     switch (modulation_type) {
         case ModulationType::QPSK:
             {
-                // According to 3GPP TS 38.211 section 5.1.3:
-                // d(i) = 1/sqrt(2) * (1 - 2*b(2i) + j*(1 - 2*b(2i+1)))
+
                 symbols.resize(bits.size() / 2);
 
                 for (size_t i = 0; i < bits.size(); i += 2) {
