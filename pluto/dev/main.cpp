@@ -42,13 +42,13 @@ int main(int argc, char *argv[]){
 
     for (int i = 0; i < N_BITS; i++) bits[i] = rand() % 2;
 
-    modulate(bits, symbols, ModulationType::QPSK);
+    modulate(bits, symbols, ModulationType::QAM16);
     UpSampler(symbols, symbols_ups, UPSAMPLE);
     filter(symbols_ups, impulse);
 
     for (size_t i = 0; i < LEN_SYMBOLS_UPS; i++) {
-        tx_samples[2*i] = (int16_t)(real(symbols_ups[i]) * SCALE_FACTOR) << BIT_SHIFT;
-        tx_samples[2*i+1] = (int16_t)(imag(symbols_ups[i]) * SCALE_FACTOR) << BIT_SHIFT;
+        tx_samples[2*i] = (real(symbols_ups[i]) * 16000);
+        tx_samples[2*i+1] = (imag(symbols_ups[i]) * 16000);
     }
 
     for (size_t i = 0; i < N_BUFFERS; ++i){

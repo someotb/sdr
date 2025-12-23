@@ -11,19 +11,34 @@ void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, Mod
                 for (size_t i = 0; i < bits.size(); i += 2) {
                     double real = (1.0 - 2.0 * bits[i]) / sqrt(2.0);
                     double imag = (1.0 - 2.0 * bits[i+1]) / sqrt(2.0);
-                    symbols[i/2] = complex<double>(real, imag);
+                    symbols[i / 2] = complex<double>(real, imag);
                 }
             }
             break;
 
         case ModulationType::BPSK:
-            // Will be implemented later
-            throw runtime_error("BPSK modulation is not implemented yet");
+            {
+                symbols.resize(bits.size() / 2);
+
+                for (size_t i = 0; i < bits.size(); ++i) {
+                    double real = (1.0 - 2.0 * bits[i]) / sqrt(2.0);
+                    double imag = (1.0 - 2.0 * bits[i]) / sqrt(2.0);
+                    symbols[i / 2] = complex<double>(real, imag);
+                }
+            }
+            break;
 
         case ModulationType::QAM16:
-            // Will be implemented later
-            throw runtime_error("16QAM modulation is not implemented yet");
+            {
+                symbols.resize(bits.size() / 4);
 
+                for (size_t i = 0; i < bits.size(); i += 4) {
+                    double real = (1 - 2 * bits[i]) * (2 - (1 - 2 * bits[i + 2])) / sqrt(10);
+                    double imag = (1 - 2 * bits[i + 1]) * (2 - (1 - 2 * bits[i + 3])) / sqrt(10);
+                    symbols[i / 4] = complex<double>(real, imag);
+                }
+            }
+            break;
         default:
             throw invalid_argument("Unsupported modulation type");
     }
