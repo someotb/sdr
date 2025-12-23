@@ -3,19 +3,6 @@
 // According to 3GPP TS 38.211 section 5.1.3:
 void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, ModulationType modulation_type) {
     switch (modulation_type) {
-        case ModulationType::QPSK:
-            {
-
-                symbols.resize(bits.size() / 2);
-
-                for (size_t i = 0; i < bits.size(); i += 2) {
-                    double real = (1.0 - 2.0 * bits[i]) / sqrt(2.0);
-                    double imag = (1.0 - 2.0 * bits[i+1]) / sqrt(2.0);
-                    symbols[i / 2] = complex<double>(real, imag);
-                }
-            }
-            break;
-
         case ModulationType::BPSK:
             {
                 symbols.resize(bits.size() / 2);
@@ -23,6 +10,17 @@ void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, Mod
                 for (size_t i = 0; i < bits.size(); ++i) {
                     double real = (1.0 - 2.0 * bits[i]) / sqrt(2.0);
                     double imag = (1.0 - 2.0 * bits[i]) / sqrt(2.0);
+                    symbols[i / 2] = complex<double>(real, imag);
+                }
+            }
+            break;
+
+        case ModulationType::QPSK:
+            {
+                symbols.resize(bits.size() / 2);
+                for (size_t i = 0; i < bits.size(); i += 2) {
+                    double real = (1.0 - 2.0 * bits[i]) / sqrt(2.0);
+                    double imag = (1.0 - 2.0 * bits[i+1]) / sqrt(2.0);
                     symbols[i / 2] = complex<double>(real, imag);
                 }
             }
