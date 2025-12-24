@@ -4,8 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-SDRDevice::SDRDevice(char* usb)
-    : sdr(nullptr), rxStream(nullptr), txStream(nullptr), rx_buffer(nullptr) {
+SDRDevice::SDRDevice(char* usb): sdr(nullptr), rxStream(nullptr), txStream(nullptr) {
     SoapySDRKwargs args = {};
     SoapySDRKwargs_set(&args, "driver", "plutosdr");
     SoapySDRKwargs_set(&args, "uri", usb);
@@ -39,11 +38,11 @@ SDRDevice::SDRDevice(char* usb)
     rx_mtu = SoapySDRDevice_getStreamMTU(sdr, rxStream);
     tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
 
-    rx_buffer = (int16_t*)calloc(2 * rx_mtu, sizeof(int16_t));
+    rx_buffer.resize(2 * rx_mtu);
+    tx_buffer.resize(2 * tx_mtu);
 }
 
 SDRDevice::~SDRDevice() {
-    if (rx_buffer) free(rx_buffer);
     if (sdr) {
         if (rxStream) {
             SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);

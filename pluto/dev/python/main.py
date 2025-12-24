@@ -9,17 +9,17 @@ answer = int(input())
 
 if answer == 2:
     nx = np.fromfile(
-        f"/home/plutoSDR/Документы/someotb/sdr/pluto/dev/build/rx.pcm",
+        "/home/someotb/Code/sdr/pluto/dev/pcm/rx.pcm",
         dtype=np.int16,
     )
 else:
     nx = np.fromfile(
-        f"/home/plutoSDR/Документы/someotb/sdr/pluto/dev/build/tx.pcm",
+        "/home/someotb/Code/sdr/pluto/dev/pcm/tx.pcm",
         dtype=np.int16,
     )
 
-rx = np.fromfile(f"/home/plutoSDR/Документы/someotb/sdr/pluto/dev/build/rx.pcm", dtype=np.int16)
-tx = np.fromfile(f"/home/plutoSDR/Документы/someotb/sdr/pluto/dev/build/tx.pcm", dtype=np.int16)
+rx = np.fromfile("/home/someotb/Code/sdr/pluto/dev/pcm/rx.pcm", dtype=np.int16)
+tx = np.fromfile("/home/someotb/Code/sdr/pluto/dev/pcm/tx.pcm", dtype=np.int16)
 
 samples = []
 
@@ -40,18 +40,18 @@ plt.grid()
 
 impulse = np.ones(10)
 
-samples_nx = (nx[0::2] + 1j * nx[1::2])
+samples_nx = nx[0::2] + 1j * nx[1::2]
 list_offset = []
 SPS = 10
 
 samples_mf = np.convolve(samples_nx, np.ones(SPS))
 signal = samples_mf
-# signal, offset_list = gardner(samples_mf, SPS)
+signal, offset_list = gardner(samples_mf, SPS)
 
 plt.figure()
 plt.title("Samples after Gardner")
-plt.plot(np.real(signal), label='REAL')
-plt.plot(np.imag(signal), label='IMAG')
+plt.plot(np.real(signal), label="REAL")
+plt.plot(np.imag(signal), label="IMAG")
 plt.legend()
 plt.grid()
 

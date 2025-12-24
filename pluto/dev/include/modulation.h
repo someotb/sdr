@@ -20,7 +20,7 @@ enum class ModulationType {
  * @param modulation_type Type of modulation to use
  */
 
- void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, ModulationType modulation_type);
+void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, ModulationType modulation_type);
 
  /**
   * @brief Upsample function
@@ -30,13 +30,21 @@ enum class ModulationType {
   * @param L Upsample factor
   */
 
- void UpSampler(const vector<complex<double>>& symbols, vector<complex<double>>& symbols_ups, int L);
+void UpSampler(const vector<complex<double>>& symbols, vector<complex<double>>& symbols_ups, int L);
 
  /**
-  * @brief Upsample function
+  * @brief Filter function
   *
   * @param symbols_ups Input complex symbols
   * @param impulse Impulse response
   */
 
- void filter(vector<complex<double>>& symbols_ups, const vector<complex<double>>& impulse);
+void filter(vector<complex<double>>& symbols_ups, const vector<complex<double>>& impulse);
+
+ /**
+  * @brief Bits function
+  *
+  * @param type Type of modulation
+  */
+
+int bits_per_symbol(ModulationType type);

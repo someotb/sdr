@@ -2,6 +2,7 @@
 
 #include <SoapySDR/Device.h>
 #include <cstdint>
+#include <vector>
 
 constexpr int SRATE = 1000000;
 constexpr int FREQ = 734750000;
@@ -17,7 +18,8 @@ public:
     size_t tx_mtu;
     int sample_rate;
     int carrier_freq;
-    int16_t* rx_buffer;
+    std::vector<int16_t> rx_buffer;
+    std::vector<int16_t> tx_buffer;
 
     SDRDevice(char* usb);
     ~SDRDevice();

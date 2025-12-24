@@ -1,16 +1,16 @@
 #include "modulation.h"
+#include <stdexcept>
 
 // According to 3GPP TS 38.211 section 5.1.3:
 void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, ModulationType modulation_type) {
     switch (modulation_type) {
         case ModulationType::BPSK:
             {
-                symbols.resize(bits.size() / 2);
-
+                symbols.resize(bits.size());
                 for (size_t i = 0; i < bits.size(); ++i) {
                     double real = (1.0 - 2.0 * bits[i]) / sqrt(2.0);
                     double imag = (1.0 - 2.0 * bits[i]) / sqrt(2.0);
-                    symbols[i / 2] = complex<double>(real, imag);
+                    symbols[i] = complex<double>(real, imag);
                 }
             }
             break;
@@ -29,7 +29,6 @@ void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, Mod
         case ModulationType::QAM16:
             {
                 symbols.resize(bits.size() / 4);
-
                 for (size_t i = 0; i < bits.size(); i += 4) {
                     double real = (1 - 2 * bits[i]) * (2 - (1 - 2 * bits[i + 2])) / sqrt(10);
                     double imag = (1 - 2 * bits[i + 1]) * (2 - (1 - 2 * bits[i + 3])) / sqrt(10);
@@ -64,4 +63,13 @@ void filter(vector<complex<double>>& symbols_ups, const vector<complex<double>>&
     }
 
     symbols_ups.swap(output);
+}
+
+int bits_per_symbol(ModulationType type) {
+    switch(type) {
+        case ModulationType::BPSK: return 1;
+        case ModulationType::QPSK: return 2;
+        case ModulationType::QAM16: return 4;
+        default: throw std::invalid_argument("Unsapported modulation type");
+    }
 }
