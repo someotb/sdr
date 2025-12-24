@@ -10,13 +10,14 @@
 #include <iostream>
 #include <vector>
 #include <string.h>
+#include <iomanip>
 #include "modulation.h"
 #include "sdr.h"
 
 using namespace std;
 
 constexpr int UPSAMPLE = 10;
-constexpr size_t N_BUFFERS = 10000000;
+constexpr size_t N_BUFFERS = 100;
 constexpr long long TIMEOUT = 400000;
 constexpr long long TX_DELAY = 4000000;
 
@@ -48,13 +49,13 @@ int main(int argc, char *argv[]){
         sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
     }
 
-    int cnt = 0;
+    int sec = 0;
     int buffers_per_second = sdr.sample_rate/sdr.tx_mtu;
     cout << "Send '" << N_BUFFERS << "' buffers:" << endl;
     for (size_t i = 0; i < N_BUFFERS; ++i) {
         if (i % buffers_per_second == 0 && i != 0) {
-            cnt++;
-            cout << "Seconds: " << cnt << "\t" << "Buffers: " << i << endl;
+            sec++;
+            cout << "Minutes: " << setw(2) << setfill('0') << (sec / 60) << ":" << setw(2) << setfill('0') << (sec % 60) << "\tBuffers: " << i << endl;
         }
         void *rx_buffs[] = {sdr.rx_buffer.data()};
         const void *tx_buffs[] = {sdr.tx_buffer.data()};
