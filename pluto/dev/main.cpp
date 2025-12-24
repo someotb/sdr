@@ -24,14 +24,15 @@ int main(int argc, char *argv[]){
     (void) argc;
 
     SDRDevice sdr(argv[1]);
-    ModulationType modulation = ModulationType::QPSK;
+    ModulationType modulation = ModulationType::QAM16;
     int bits_size = bits_per_symbol(modulation);
+    size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
 
     FILE *tx = fopen("../pcm/tx.pcm", "wb");
     FILE *rx = fopen("../pcm/rx.pcm", "wb");
     if (!tx || !rx) { perror("fopen"); return -1; }
 
-    vector<int16_t> bits(sdr.tx_mtu * bits_size);
+    vector<int16_t> bits(max_symbols * bits_size);
     vector<complex<double>> symbols(bits.size() / bits_size);
     vector<complex<double>> impulse(UPSAMPLE, 1.0);
     vector<complex<double>> symbols_ups(sdr.tx_mtu * UPSAMPLE);
@@ -48,9 +49,10 @@ int main(int argc, char *argv[]){
     }
 
     int cnt = 0;
+    int buffers_per_second = sdr.sample_rate/sdr.tx_mtu;
     cout << "Send '" << N_BUFFERS << "' buffers:" << endl;
     for (size_t i = 0; i < N_BUFFERS; ++i) {
-        if (i % 520 == 0 && i != 0) {
+        if (i % buffers_per_second == 0 && i != 0) {
             cnt++;
             cout << "Seconds: " << cnt << "\t" << "Buffers: " << i << endl;
         }
