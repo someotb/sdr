@@ -6,7 +6,7 @@
 
 constexpr int SRATE = 1000000;
 constexpr int FREQ = 734750000;
-constexpr int RX_GAIN = 40;
+constexpr int RX_GAIN = 25;
 constexpr int TX_GAIN = -10;
 
 class SDRDevice {

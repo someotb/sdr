@@ -38,7 +38,7 @@ target_include_directories(implot PUBLIC ${THIRD_PARTY_DIR}/implot)
 target_link_libraries(implot PRIVATE imgui)
 
 set(MAIN_SOURCE_FILES
-    ${SRC_DIR}/test.cpp
+    ${SRC_DIR}/gui.cpp
     ${SRC_DIR}/modulation.cpp
     ${SRC_DIR}/sdr.cpp
 )
