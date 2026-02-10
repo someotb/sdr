@@ -86,7 +86,7 @@ void run_gui(sharedData *sh_data) {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     SDL_Window* window = SDL_CreateWindow(
         "Backend start", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        1820, 780, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+        1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 
     ImGui::CreateContext();
@@ -117,8 +117,13 @@ void run_gui(sharedData *sh_data) {
             real[i] = sh_data->datas[2 * i];
             imag[i] = sh_data->datas[2 * i + 1];
         }
-        if (ImPlot::BeginPlot("Plot Line", ImVec2(1520, 590))) {
+        if (ImPlot::BeginPlot("Scatter", ImVec2(1640, 400))) {
             ImPlot::PlotScatter("real / imag", real.data(), imag.data(), 1920);
+            ImPlot::EndPlot();
+        }
+        if (ImPlot::BeginPlot("Line", ImVec2(1640, 400))) {
+            ImPlot::PlotLine("real", real.data(), real.size());
+            ImPlot::PlotLine("imag", imag.data(), imag.size());
             ImPlot::EndPlot();
         }
 
