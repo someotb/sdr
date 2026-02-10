@@ -11,6 +11,14 @@
 #include <vector>
 #include <string.h>
 #include <iomanip>
+#include <GL/glew.h>
+#include <SDL2/SDL.h>
+#include <chrono>
+#include <thread>
+#include <cmath>
+#include "imgui.h"
+#include "backends/imgui_impl_opengl3.h"
+#include "backends/imgui_impl_sdl2.h"
 #include "modulation.h"
 #include "sdr.h"
 
@@ -21,7 +29,7 @@ constexpr size_t N_BUFFERS = 100;
 constexpr long long TIMEOUT = 400000;
 constexpr long long TX_DELAY = 4000000;
 
-int main(int argc, char *argv[]){
+int main(int argc, char *argv[]) {
     (void) argc;
 
     SDRDevice sdr(argv[1]);
