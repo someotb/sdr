@@ -1,72 +1,84 @@
+#include <SoapySDR/Device.h>
+#include <SoapySDR/Formats.h>
+#include <complex>
+#include <cstdint>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <complex.h>
+#include <math.h>
+#include <iostream>
+#include <vector>
+#include <string.h>
+#include <iomanip>
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
-
-#include <iostream>
 #include <chrono>
 #include <thread>
 #include <cmath>
-
-#include "backends/imgui_impl_opengl3.h"
-#include "backends/imgui_impl_sdl2.h"
 #include "imgui.h"
 #include "implot.h"
+#include "backends/imgui_impl_opengl3.h"
+#include "backends/imgui_impl_sdl2.h"
+#include "modulation.h"
+#include "sdr.h"
 
-int main(int argc, char *argv[]) {
+struct sharedData 
+{
+    vector<int16_t> bits;
+};
 
-    // 1) Инициализация SDL
+void run_backend(struct sharedData &data) {
+    for (size_t i = 0; i < 10000; ++i) {
+        data.bits.push_back(rand() % 2);
+    }
+}
+
+void run_gui(struct sharedData &data) {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     SDL_Window* window = SDL_CreateWindow(
         "Backend start", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         1024, 768, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 
-    // 2) Инициализация контекста Dear Imgui
     ImGui::CreateContext();
     ImPlot::CreateContext();
-
-    // Ввод\вывод
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Включить Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Включить Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Включить Docking
-
-    // 2.1) Привязка Imgui к SDL2 и OpenGl backend'ам
+    
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init("#version 330");
 
-    // 3) Игра началась
     bool running = true;
     while (running) {
-
-        // 3.0) Обработка event'ов (inputs, window resize, mouse moving, etc.);
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            std::cout << "Processing some event: "<< event.type << std::endl;
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
                 running = false;
             }
         }
 
-        // 3.1) Начинаем создавать новый фрейм;
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
 
+        vector<int16_t> real;
+        vector<int16_t> imag;
 
-        // 3.2) Наш виджет с кнопкой;
-        {
-            static int counter = 0;
-            ImGui::Begin("Hello, world!"); 
-                ImGui::Text("This is some useful text.");    
-                if (ImGui::Button("Button"))                         
-                    counter++;
-                ImGui::Text("counter = %d", counter);
-            ImGui::End();
+        for (size_t i = 0; i < data.bits.size(); ++i) {
+            real.push_back(data.bits[i]);
+            imag.push_back(data.bits[i]);
         }
 
-        // 3.3) Отправляем на рендер;
+        if (ImPlot::BeginPlot("Plot Line")) {
+            ImPlot::PlotLine("real / imag", real.data(), imag.data(), real.size());
+            ImPlot::EndPlot();
+        }
+
         ImGui::Render();
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -75,7 +87,6 @@ int main(int argc, char *argv[]) {
         SDL_GL_SwapWindow(window);
     }
 
-    // 4) Закрываем приложение безопасно.
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImPlot::DestroyContext();
@@ -83,6 +94,15 @@ int main(int argc, char *argv[]) {
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
     SDL_Quit();
+}
 
+int main() {
+    struct sharedData sd;
+
+    std::thread gui_thread(run_gui, ref(sd));
+    gui_thread.join();
+    std::thread backend_thread(run_backend, ref(sd));
+    backend_thread.join();
+    
     return 0;
 }
