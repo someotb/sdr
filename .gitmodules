@@ -1,0 +1,22 @@
+[submodule "pluto/dev/third_party/implot"]
+	path = pluto/dev/third_party/implot
+	url = https://github.com/epezent/implot.git
+[submodule "pluto/dev/third_party/imgui"]
+	path = pluto/dev/third_party/imgui
+	url = https://github.com/ocornut/imgui.git
+	branch = docking
+[submodule "pluto/dev/SoapySDR"]
+	path = pluto/dev/SoapySDR
+	url = https://github.com/TelecomDep/SoapySDR.git
+[submodule "pluto/dev/third_party/SoapySDR"]
+	path = pluto/dev/third_party/SoapySDR
+	url = https://github.com/TelecomDep/SoapySDR.git
+[submodule "pluto/dev/third_party/libiio"]
+	path = pluto/dev/third_party/libiio
+	url = https://github.com/TelecomDep/libiio.git
+[submodule "pluto/dev/third_party/libad9361-iio"]
+	path = pluto/dev/third_party/libad9361-iio
+	url = https://github.com/TelecomDep/libad9361-iio.git
+[submodule "pluto/dev/third_party/SoapyPlutoSDR"]
+	path = pluto/dev/third_party/SoapyPlutoSDR
+	url = https://github.com/TelecomDep/SoapyPlutoSDR.git

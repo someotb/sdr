@@ -9,17 +9,17 @@ answer = int(input())
 
 if answer == 2:
     nx = np.fromfile(
-        "/home/someotb/Code/sdr/pluto/dev/pcm/rx.pcm",
+        "/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/pcm/rx.pcm",
         dtype=np.int16,
     )
 else:
     nx = np.fromfile(
-        "/home/someotb/Code/sdr/pluto/dev/pcm/tx.pcm",
+        "/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/pcm/tx.pcm",
         dtype=np.int16,
     )
 
-rx = np.fromfile("/home/someotb/Code/sdr/pluto/dev/pcm/rx.pcm", dtype=np.int16)
-tx = np.fromfile("/home/someotb/Code/sdr/pluto/dev/pcm/tx.pcm", dtype=np.int16)
+rx = np.fromfile("/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/pcm/rx.pcm", dtype=np.int16)
+tx = np.fromfile("/home/plutoSDR/Документы/someotb/code/sdr/pluto/dev/pcm/tx.pcm", dtype=np.int16)
 
 samples = []
 
