@@ -113,6 +113,7 @@ void run_gui(sharedData *sh_data) {
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
+        ImGui::Begin("Graphs");
         for (int i = 0; i < 1920; ++i) {
             real[i] = sh_data->datas[2 * i];
             imag[i] = sh_data->datas[2 * i + 1];
@@ -126,6 +127,22 @@ void run_gui(sharedData *sh_data) {
             ImPlot::PlotLine("imag", imag.data(), imag.size());
             ImPlot::EndPlot();
         }
+        ImGui::End();
+        ImGui::SetNextWindowSize(ImVec2(100, 100));
+        ImGui::Begin("Theme");
+        static int style_idx = 2;
+
+        if (ImGui::Button("Light")) style_idx = 1;
+        if (ImGui::Button("Dark")) style_idx = 0;
+        if (ImGui::Button("Classic")) style_idx = 2;
+
+        switch (style_idx) {
+            case 0: ImGui::StyleColorsDark(); break;
+            case 1: ImGui::StyleColorsLight(); break;
+            case 2: ImGui::StyleColorsClassic(); break;
+        }
+        ImGui::End();
+
 
         ImGui::Render();
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
