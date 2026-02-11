@@ -36,6 +36,18 @@ struct sharedData
     float tx_gain;
 };
 
+static void HelpMarker(const char* desc)
+{
+    ImGui::TextDisabled("(?)");
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(desc);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
     ModulationType modulation = ModulationType::QAM16;
@@ -61,8 +73,10 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     int buffers_per_second = sdr.sample_rate/sdr.tx_mtu;
     int sgr = 0;
     int sgt = 0;
-    cout << "Transmission of '" << N_BUFFERS << "' buffers started:\n";
+    int cnt_of_buffers = 0;
+    cout << "[Transmission]" << "Transmission of '" << N_BUFFERS << "' buffers started:\n";
     for (size_t i = 0; i < N_BUFFERS; ++i) {
+        cnt_of_buffers = i;
         if (sh_data->quit) break;
 
         sgr = sdr.set_gain_rx((double)sh_data->rx_gain);
@@ -92,7 +106,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             (void)st;
         }
     }
-    cout << "Transmission of '" << N_BUFFERS << "' buffers complited\n";
+    cout << "Transmission of '" << cnt_of_buffers << "' buffers complited\n";
 }
 
 void run_gui(sharedData *sh_data) {
@@ -115,6 +129,8 @@ void run_gui(sharedData *sh_data) {
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init("#version 330");
     ImVec2 Window_Size = ImVec2(1920, 1080);
+    ImVec2 Window_Size2 = ImVec2(1920, 1080);
+
 
     bool running = true;
     while (running) {
@@ -150,19 +166,20 @@ void run_gui(sharedData *sh_data) {
         }
         ImGui::End();
 
-        Window_Size = ImGui::GetWindowSize();
-        ImGui::SetNextWindowSize(ImVec2(100, 1080));
         ImGui::Begin("Settings");
         if (ImGui::BeginTabBar("Control Panel")) {
             if (ImGui::BeginTabItem("TX CONFIG")) {
-                if (ImGui::TreeNodeEx("Transmition")) {
-                    ImGui::Checkbox("Send(on/off)", &sh_data->send);
-                    ImGui::SliderFloat("RX GAIN", &sh_data->rx_gain, 0.0f, 70.0f);
-                    ImGui::SliderFloat("TX GAIN", &sh_data->tx_gain, -10.0f, -90.0f);
+                if (ImGui::TreeNodeEx("Transmission")) {
+                    ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
+                    ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.2f, 0.0f, 70.0f);
+                    ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
+                    ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.2f, -10.0f, -90.0f);
+                    ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
                     ImGui::TreePop();
                 }
                 ImGui::EndTabItem();
             }
+
             if (ImGui::BeginTabItem("VIEW")) {
                 if (ImGui::TreeNodeEx("Theme Color")) {
                     if (ImGui::Button("Light")) ImGui::StyleColorsLight();
@@ -177,6 +194,8 @@ void run_gui(sharedData *sh_data) {
             ImGui::EndTabBar();
         }
         ImGui::End();
+
+        ImGui::ShowDemoWindow();
 
         ImGui::Render();
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
