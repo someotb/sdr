@@ -22,6 +22,7 @@ SDRDevice::SDRDevice(char* usb): sdr(nullptr), rxStream(nullptr), txStream(nullp
     SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_TX, 0, SRATE);
     SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, FREQ, NULL);
 
+    SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_RX, 0, false);
     SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, 0, RX_GAIN);
     SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, 0, TX_GAIN);
 
