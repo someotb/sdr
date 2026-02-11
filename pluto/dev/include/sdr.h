@@ -1,5 +1,6 @@
 #pragma once
 
+#include <SoapySDR/Constants.h>
 #include <SoapySDR/Device.h>
 #include <cstdint>
 #include <vector>
@@ -29,6 +30,11 @@ public:
     int set_gain_tx(double tx_gain) {
         int sg = SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, 0, tx_gain);
         return sg;
+    }
+
+    void set_frequency(double freq) {
+        SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, freq, NULL);
+        SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, freq, NULL);
     }
 
     SDRDevice(char* usb);

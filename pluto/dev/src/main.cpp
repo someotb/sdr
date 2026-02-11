@@ -34,6 +34,7 @@ struct sharedData
     bool quit;
     float rx_gain;
     float tx_gain;
+    float frequency;
 };
 
 static void HelpMarker(const char* desc)
@@ -50,7 +51,7 @@ static void HelpMarker(const char* desc)
 
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
-    ModulationType modulation = ModulationType::QAM16;
+    ModulationType modulation = ModulationType::QPSK;
     int bits_size = bits_per_symbol(modulation);
     size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
 
@@ -74,7 +75,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     int sgr = 0;
     int sgt = 0;
     int cnt_of_buffers = 0;
-    cout << "[Transmission]" << "Transmission of '" << N_BUFFERS << "' buffers started:\n";
+    cout << "[TX] " << "Transmission of '" << N_BUFFERS << "' buffers started:\n";
     for (size_t i = 0; i < N_BUFFERS; ++i) {
         cnt_of_buffers = i;
         if (sh_data->quit) break;
@@ -83,10 +84,11 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         (void) sgr;
         sgt = sdr.set_gain_tx((double)sh_data->tx_gain);
         (void) sgt;
+        // sdr.set_frequency((int)sh_data->frequency);
 
         if (i % buffers_per_second == 0 && i != 0) {
             sec++;
-            cout << "Minutes: " << setw(2) << setfill('0') << (sec / 60) << ":" << setw(2) << setfill('0') << (sec % 60) << "\tBuffers: " << i << endl;
+            cout << "[TX] " << "Minutes: " << setw(2) << setfill('0') << (sec / 60) << ":" << setw(2) << setfill('0') << (sec % 60) << "\tBuffers: " << i << endl;
         }
 
         void *rx_buffs[] = {sh_data->datas.data()};
@@ -106,7 +108,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             (void)st;
         }
     }
-    cout << "Transmission of '" << cnt_of_buffers << "' buffers complited\n";
+    cout << "[TX] " << "Transmission of '" << cnt_of_buffers << "' buffers complited\n";
 }
 
 void run_gui(sharedData *sh_data) {
@@ -129,7 +131,6 @@ void run_gui(sharedData *sh_data) {
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init("#version 330");
     ImVec2 Window_Size = ImVec2(1920, 1080);
-    ImVec2 Window_Size2 = ImVec2(1920, 1080);
 
 
     bool running = true;
@@ -173,7 +174,9 @@ void run_gui(sharedData *sh_data) {
                     ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
                     ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.2f, 0.0f, 70.0f);
                     ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
-                    ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.2f, -10.0f, -90.0f);
+                    ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.2f, -90.0f, -10.0f);
+                    ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
+                    ImGui::DragFloat("FREQUENCY", &sh_data->frequency, 1000000, 325 * 1000000, 3.8 * 1000000000);
                     ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
                     ImGui::TreePop();
                 }
@@ -222,6 +225,7 @@ int main(int argc, char *argv[]) {
     sd.quit = false;
     sd.rx_gain = 25.0f;
     sd.tx_gain = -10.0f;
+    sd.frequency = 868000000;
 
 
     std::thread gui_thread(run_gui, &sd);
