@@ -20,6 +20,6 @@ sudo make
 ```bash
 sudo ./main usb:0.0.0
 ```
-Вместо 0.0.0 подставьте свое значение, которое можно узнать с помощью команды `SoapySDRUtil -f`
+Вместо '0.0.0' подставьте свое значение, которое можно узнать с помощью команды `SoapySDRUtil -f`
 
 > Сайт с заметками и полезной информацией - [Yonote](https://sibsutis-rush.yonote.ru/share/93c85288-45ca-4532-8eab-4079899a5e1c/doc/lekcii-sdr-club-yadro-sibguti-kQcxQjrHno)
