@@ -100,7 +100,9 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         int flags = 0;
         long long timeNs = 0;
 
-        if (int err = SoapySDRDevice_setGainElement(sdr.sdr, 1, 0, "LNA", static_cast<double>(sh_data->rx_gain)) != 0) cout << "[ERROR] SET RX GAIN | ERR CODE: " << err << "\n";
+        if (int err; (err = SoapySDRDevice_setGainElement(sdr.sdr, 1, 0, "LNA", static_cast<double>(sh_data->rx_gain))) != 0) {
+            cout << "[ERROR] SET RX GAIN | ERR CODE: " << err << "\n";
+        }
         int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
         (void)sr;
 
@@ -108,7 +110,10 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         flags = SOAPY_SDR_HAS_TIME;
 
         if (sh_data->send) {
-            if (int err = SoapySDRDevice_setGainElement(sdr.sdr, 0, 0, "PDA", static_cast<double>(sh_data->tx_gain)) != 0) cout << "[ERROR] SET TX GAIN | ERR CODE: " << err << "\n";
+            if (int err; (err = SoapySDRDevice_setGainElement(sdr.sdr, SOAPY_SDR_TX, 0, "PDA", static_cast<double>(sh_data->tx_gain))) != 0) {
+                cout << "[ERROR] SET TX GAIN | ERR CODE: " << err << "\n";
+            }
+
             int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
             (void)st;
         }
