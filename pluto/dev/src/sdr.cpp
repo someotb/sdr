@@ -14,17 +14,16 @@ SDRDevice::SDRDevice(char* usb): sdr(nullptr), rxStream(nullptr), txStream(nullp
     sdr = SoapySDRDevice_make(&args);
     SoapySDRKwargs_clear(&args);
 
-    sample_rate = SRATE;
-    carrier_freq = FREQ;
-
-    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, SRATE);
-    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, FREQ, NULL);
-    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_TX, 0, SRATE);
-    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, FREQ, NULL);
+    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, SAMPLE_RATE);
+    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, CARR_FREQ, NULL);
+    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_TX, 0, SAMPLE_RATE);
+    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, CARR_FREQ, NULL);
 
     SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_RX, 0, false);
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, 0, RX_GAIN);
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, 0, TX_GAIN);
+    SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_TX, 0, false);
+
+    SoapySDRDevice_setGainElement(sdr, SOAPY_SDR_RX, 0, "LNA", RX_GAIN);
+    SoapySDRDevice_setGainElement(sdr, SOAPY_SDR_TX, 0, "PDA", TX_GAIN);
 
     size_t rx_channels[] = {0};
     size_t tx_channels[] = {0};

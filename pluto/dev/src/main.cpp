@@ -1,5 +1,6 @@
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
+#include <SoapySDR/Types.h>
 #include <cstddef>
 #include <cstdint>
 #include <stdio.h>
@@ -7,6 +8,7 @@
 #include <stdint.h>
 #include <complex.h>
 #include <math.h>
+#include <unistd.h>
 #include <vector>
 #include <string.h>
 #include <GL/glew.h>
@@ -51,6 +53,13 @@ static void HelpMarker(const char* desc)
 
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
+    SoapySDRRange r;
+    r = SoapySDRDevice_getGainRange(sdr.sdr, 0, 0);
+    cout << "[INFO] " << "TX GAIN: " << "MAX: " << r.maximum << " | MIN: " << r.minimum << " | STEP: " << r.step << "\n";
+    r = SoapySDRDevice_getGainRange(sdr.sdr, 1, 0);
+    cout << "[INFO] " << "RX GAIN: " << "MAX: " << r.maximum << " | MIN: " << r.minimum << " | STEP: " << r.step << "\n";
+
+
     ModulationType modulation = ModulationType::QPSK;
     int bits_size = bits_per_symbol(modulation);
     size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
@@ -70,25 +79,19 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         sdr.tx_buffer[2*i] = (real(symbols_ups[i]) * 16000);
         sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
     }
+    int buffers_per_second = SAMPLE_RATE/sdr.tx_mtu;
     int sec = 0;
-    int buffers_per_second = sdr.sample_rate/sdr.tx_mtu;
-    int sgr = 0;
-    int sgt = 0;
     int cnt_of_buffers = 0;
     cout << "[TX] " << "Transmission of '" << N_BUFFERS << "' buffers started:\n";
     for (size_t i = 0; i < N_BUFFERS; ++i) {
         cnt_of_buffers = i;
         if (sh_data->quit) break;
 
-        sgr = sdr.set_gain_rx((double)sh_data->rx_gain);
-        (void) sgr;
-        sgt = sdr.set_gain_tx((double)sh_data->tx_gain);
-        (void) sgt;
-        // sdr.set_frequency((int)sh_data->frequency);
+        // if (int err = sdr.set_frequency(static_cast<double>(sh_data->frequency), 1)) cout << "[ERROR] SET FREQ | ERR CODE: " << err << "\n";
 
         if (i % buffers_per_second == 0 && i != 0) {
             sec++;
-            cout << "[TX] " << "Minutes: " << setw(2) << setfill('0') << (sec / 60) << ":" << setw(2) << setfill('0') << (sec % 60) << "\tBuffers: " << i << endl;
+            cout << "[TX] " << "Minutes: " << setw(2) << setfill('0') << (sec / 60) << ":" << setw(2) << setfill('0') << (sec % 60) << " | Buffers: " << i << endl;
         }
 
         void *rx_buffs[] = {sh_data->datas.data()};
@@ -97,6 +100,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         int flags = 0;
         long long timeNs = 0;
 
+        if (int err = SoapySDRDevice_setGainElement(sdr.sdr, 1, 0, "LNA", static_cast<double>(sh_data->rx_gain)) != 0) cout << "[ERROR] SET RX GAIN | ERR CODE: " << err << "\n";
         int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
         (void)sr;
 
@@ -104,6 +108,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         flags = SOAPY_SDR_HAS_TIME;
 
         if (sh_data->send) {
+            if (int err = SoapySDRDevice_setGainElement(sdr.sdr, 0, 0, "PDA", static_cast<double>(sh_data->tx_gain)) != 0) cout << "[ERROR] SET TX GAIN | ERR CODE: " << err << "\n";
             int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
             (void)st;
         }
@@ -124,9 +129,9 @@ void run_gui(sharedData *sh_data) {
     ImGui::CreateContext();
     ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Включить Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Включить Gamepad Controls
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Включить Docking
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init("#version 330");
@@ -172,11 +177,11 @@ void run_gui(sharedData *sh_data) {
             if (ImGui::BeginTabItem("TX CONFIG")) {
                 if (ImGui::TreeNodeEx("Transmission")) {
                     ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
-                    ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.2f, 0.0f, 70.0f);
+                    ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 1.f, 73.f);
                     ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
-                    ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.2f, -90.0f, -10.0f);
+                    ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f);
                     ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
-                    ImGui::DragFloat("FREQUENCY", &sh_data->frequency, 1000000, 325 * 1000000, 3.8 * 1000000000);
+                    ImGui::DragFloat("FREQUENCY", &sh_data->frequency, 1000000.f, 70.f * 1000000.f, 6.f * 1000000000.f);
                     ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
                     ImGui::TreePop();
                 }
@@ -198,7 +203,7 @@ void run_gui(sharedData *sh_data) {
         }
         ImGui::End();
 
-        ImGui::ShowDemoWindow();
+        // ImGui::ShowDemoWindow();
 
         ImGui::Render();
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -223,8 +228,8 @@ int main(int argc, char *argv[]) {
     sd.datas.resize(1920 * 2);
     sd.send = false;
     sd.quit = false;
-    sd.rx_gain = 25.0f;
-    sd.tx_gain = -10.0f;
+    sd.rx_gain = 25.f;
+    sd.tx_gain = 60.f;
     sd.frequency = 868000000;
 
 
