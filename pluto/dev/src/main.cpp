@@ -34,32 +34,19 @@ struct sharedData
     std::vector<int16_t> datas;
     bool send;
     bool quit;
+    bool changed_rx_gain;
+    bool changed_tx_gain;
+    bool changed_rx_freq;
+    bool changed_tx_freq;
     float rx_gain;
     float tx_gain;
-    float frequency;
+    float rx_frequency;
+    float tx_frequency;
 };
-
-static void HelpMarker(const char* desc)
-{
-    ImGui::TextDisabled("(?)");
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-        ImGui::TextUnformatted(desc);
-        ImGui::PopTextWrapPos();
-        ImGui::EndTooltip();
-    }
-}
 
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
-    SoapySDRRange r;
-    r = SoapySDRDevice_getGainRange(sdr.sdr, 0, 0);
-    cout << "[INFO] " << "TX GAIN: " << "MAX: " << r.maximum << " | MIN: " << r.minimum << " | STEP: " << r.step << "\n";
-    r = SoapySDRDevice_getGainRange(sdr.sdr, 1, 0);
-    cout << "[INFO] " << "RX GAIN: " << "MAX: " << r.maximum << " | MIN: " << r.minimum << " | STEP: " << r.step << "\n";
-
-
+    sdr.sample_rate = 1000000.0;
     ModulationType modulation = ModulationType::QPSK;
     int bits_size = bits_per_symbol(modulation);
     size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
@@ -79,15 +66,41 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         sdr.tx_buffer[2*i] = (real(symbols_ups[i]) * 16000);
         sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
     }
-    int buffers_per_second = SAMPLE_RATE/sdr.tx_mtu;
+    int buffers_per_second = sdr.sample_rate/sdr.tx_mtu;
     int sec = 0;
     int cnt_of_buffers = 0;
     cout << "[TX] " << "Transmission of '" << N_BUFFERS << "' buffers started:\n";
     for (size_t i = 0; i < N_BUFFERS; ++i) {
+        if (sh_data->changed_rx_gain) {
+            if (int err; (err = SoapySDRDevice_setGainElement(sdr.sdr, SOAPY_SDR_RX, 0, "LNA", static_cast<double>(sh_data->rx_gain))) != 0) {
+                cout << "[ERROR] SET RX GAIN | ERR CODE: " << err << "\n";
+            }
+            sh_data->changed_rx_gain = false;
+        }
+
+        if (sh_data->changed_tx_gain) {
+            if (int err; (err = SoapySDRDevice_setGainElement(sdr.sdr, SOAPY_SDR_TX, 0, "PDA", static_cast<double>(sh_data->tx_gain))) != 0) {
+                cout << "[ERROR] SET TX GAIN | ERR CODE: " << err << "\n";
+            }
+            sh_data->changed_tx_gain = false;
+        }
+
+        // if (sh_data->changed_rx_freq) {
+        //     if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_frequency), NULL)) != 0) {
+        //         cout << "[ERROR] SET RX FREQ | ERR CODE: " << err << "\n";
+        //     }
+        //     sh_data->changed_rx_freq = false;
+        // }
+
+        // if (sh_data->changed_tx_freq) {
+        //     if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_frequency), NULL)) != 0) {
+        //         cout << "[ERROR] SET TX FREQ | ERR CODE: " << err << "\n";
+        //     }
+        //     sh_data->changed_tx_gain = false;
+        // }
+
         cnt_of_buffers = i;
         if (sh_data->quit) break;
-
-        // if (int err = sdr.set_frequency(static_cast<double>(sh_data->frequency), 1)) cout << "[ERROR] SET FREQ | ERR CODE: " << err << "\n";
 
         if (i % buffers_per_second == 0 && i != 0) {
             sec++;
@@ -100,20 +113,14 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         int flags = 0;
         long long timeNs = 0;
 
-        if (int err; (err = SoapySDRDevice_setGainElement(sdr.sdr, 1, 0, "LNA", static_cast<double>(sh_data->rx_gain))) != 0) {
-            cout << "[ERROR] SET RX GAIN | ERR CODE: " << err << "\n";
-        }
         int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
         (void)sr;
 
         long long tx_time = timeNs + TX_DELAY;
         flags = SOAPY_SDR_HAS_TIME;
 
-        if (sh_data->send) {
-            if (int err; (err = SoapySDRDevice_setGainElement(sdr.sdr, SOAPY_SDR_TX, 0, "PDA", static_cast<double>(sh_data->tx_gain))) != 0) {
-                cout << "[ERROR] SET TX GAIN | ERR CODE: " << err << "\n";
-            }
 
+        if (sh_data->send) {
             int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
             (void)st;
         }
@@ -182,12 +189,14 @@ void run_gui(sharedData *sh_data) {
             if (ImGui::BeginTabItem("TX CONFIG")) {
                 if (ImGui::TreeNodeEx("Transmission")) {
                     ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
-                    ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 1.f, 73.f);
-                    ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
+                    ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 0.f, 73.f);
+                    sh_data->changed_rx_gain = true;
                     ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f);
-                    ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
-                    ImGui::DragFloat("FREQUENCY", &sh_data->frequency, 1000000.f, 70.f * 1000000.f, 6.f * 1000000000.f);
-                    ImGui::SameLine(); HelpMarker("Ctrl+Click to input value.");
+                    sh_data->changed_tx_gain = true;
+                    ImGui::DragFloat("RX FREQUENCY", &sh_data->rx_frequency, 1000000.f, 70.f * 1000000.f, 6.f * 1000000000.f);
+                    sh_data->changed_rx_freq = true;
+                    ImGui::DragFloat("TX FREQUENCY", &sh_data->tx_frequency, 1000000.f, 70.f * 1000000.f, 6.f * 1000000000.f);
+                    sh_data->changed_tx_freq = true;
                     ImGui::TreePop();
                 }
                 ImGui::EndTabItem();
@@ -233,9 +242,14 @@ int main(int argc, char *argv[]) {
     sd.datas.resize(1920 * 2);
     sd.send = false;
     sd.quit = false;
+    sd.changed_rx_gain = false;
+    sd.changed_tx_gain = false;
+    sd.changed_rx_freq = false;
+    sd.changed_tx_freq = false;
     sd.rx_gain = 25.f;
     sd.tx_gain = 60.f;
-    sd.frequency = 868000000;
+    sd.tx_frequency = 868000000.f;
+    sd.rx_frequency = 868000000.f;
 
 
     std::thread gui_thread(run_gui, &sd);
