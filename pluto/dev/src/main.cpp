@@ -40,8 +40,8 @@ struct sharedData
     bool changed_tx_freq;
     float rx_gain;
     float tx_gain;
-    float rx_frequency;
-    float tx_frequency;
+    double rx_frequency;
+    double tx_frequency;
 };
 
 void run_backend(sharedData *sh_data, char *argv[]) {
@@ -85,19 +85,19 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             sh_data->changed_tx_gain = false;
         }
 
-        // if (sh_data->changed_rx_freq) {
-        //     if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_frequency), NULL)) != 0) {
-        //         cout << "[ERROR] SET RX FREQ | ERR CODE: " << err << "\n";
-        //     }
-        //     sh_data->changed_rx_freq = false;
-        // }
+        if (sh_data->changed_rx_freq) {
+            if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_RX, 0, sh_data->rx_frequency, NULL)) != 0) {
+                cout << "[ERROR] SET RX FREQ | ERR CODE: " << err << "\n";
+            }
+            sh_data->changed_rx_freq = false;
+        }
 
-        // if (sh_data->changed_tx_freq) {
-        //     if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_frequency), NULL)) != 0) {
-        //         cout << "[ERROR] SET TX FREQ | ERR CODE: " << err << "\n";
-        //     }
-        //     sh_data->changed_tx_gain = false;
-        // }
+        if (sh_data->changed_tx_freq) {
+            if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_TX, 0, sh_data->tx_frequency, NULL)) != 0) {
+                cout << "[ERROR] SET TX FREQ | ERR CODE: " << err << "\n";
+            }
+            sh_data->changed_tx_freq = false;
+        }
 
         cnt_of_buffers = i;
         if (sh_data->quit) break;
@@ -149,7 +149,6 @@ void run_gui(sharedData *sh_data) {
     ImGui_ImplOpenGL3_Init("#version 330");
     ImVec2 Window_Size = ImVec2(1920, 1080);
 
-
     bool running = true;
     while (running) {
         SDL_Event event;
@@ -174,12 +173,12 @@ void run_gui(sharedData *sh_data) {
             imag[i] = sh_data->datas[2 * i + 1];
         }
         if (ImPlot::BeginPlot("Scatter", Window_Size)) {
-            ImPlot::PlotScatter("real / imag", real.data(), imag.data(), 1920);
+            ImPlot::PlotScatter("I/Q", real.data(), imag.data(), 1920);
             ImPlot::EndPlot();
         }
         if (ImPlot::BeginPlot("Line", Window_Size)) {
-            ImPlot::PlotLine("real", real.data(), real.size());
-            ImPlot::PlotLine("imag", imag.data(), imag.size());
+            ImPlot::PlotLine("I", real.data(), real.size());
+            ImPlot::PlotLine("Q", imag.data(), imag.size());
             ImPlot::EndPlot();
         }
         ImGui::End();
@@ -193,10 +192,10 @@ void run_gui(sharedData *sh_data) {
                     sh_data->changed_rx_gain = true;
                     ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f);
                     sh_data->changed_tx_gain = true;
-                    ImGui::DragFloat("RX FREQUENCY", &sh_data->rx_frequency, 1000000.f, 70.f * 1000000.f, 6.f * 1000000000.f);
-                    sh_data->changed_rx_freq = true;
-                    ImGui::DragFloat("TX FREQUENCY", &sh_data->tx_frequency, 1000000.f, 70.f * 1000000.f, 6.f * 1000000000.f);
-                    sh_data->changed_tx_freq = true;
+                    // ImGui::InputDouble("RX FREQUENCY", &sh_data->rx_frequency, 100);
+                    // sh_data->changed_rx_freq = true;
+                    // ImGui::InputInt("TX FREQUENCY", &sh_data->tx_frequency, 100);
+                    // sh_data->changed_tx_freq = true;
                     ImGui::TreePop();
                 }
                 ImGui::EndTabItem();
@@ -217,7 +216,7 @@ void run_gui(sharedData *sh_data) {
         }
         ImGui::End();
 
-        // ImGui::ShowDemoWindow();
+        ImGui::ShowDemoWindow();
 
         ImGui::Render();
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -248,8 +247,8 @@ int main(int argc, char *argv[]) {
     sd.changed_tx_freq = false;
     sd.rx_gain = 25.f;
     sd.tx_gain = 60.f;
-    sd.tx_frequency = 868000000.f;
-    sd.rx_frequency = 868000000.f;
+    sd.tx_frequency = 868e6;
+    sd.rx_frequency = 868e6;
 
 
     std::thread gui_thread(run_gui, &sd);
