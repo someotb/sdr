@@ -14,8 +14,13 @@ SDRDevice::SDRDevice(char* usb): sdr(nullptr), rxStream(nullptr), txStream(nullp
     sdr = SoapySDRDevice_make(&args);
     SoapySDRKwargs_clear(&args);
 
-    SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_RX, 0, false);
-    SoapySDRDevice_setGainMode(sdr, SOAPY_SDR_TX, 0, false);
+    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, sample_rate);
+    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, frequency, NULL);
+    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_TX, 0, sample_rate);
+    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, frequency, NULL);
+
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, 0, rx_gain);
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, 0, tx_gain);
 
     size_t rx_channels[] = {0};
     size_t tx_channels[] = {0};
