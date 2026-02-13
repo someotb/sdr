@@ -32,16 +32,18 @@ constexpr long long TX_DELAY = 4000000;
 struct sharedData
 {
     std::vector<int16_t> datas;
-    bool send;
-    bool quit;
-    bool changed_rx_gain;
-    bool changed_tx_gain;
-    bool changed_rx_freq;
-    bool changed_tx_freq;
+    bool send = false;
+    bool quit = false;
+    bool changed_rx_gain = false;
+    bool changed_tx_gain = false;
+    bool changed_rx_freq = false;
+    bool changed_tx_freq = false;
+    bool changed_sample_rate = false;
     float rx_gain = 20.f;
     float tx_gain = 82.f;
     double rx_frequency = 826e6;
     double tx_frequency = 826e6;
+    double sample_rate = 1e6;
 };
 
 void run_backend(sharedData *sh_data, char *argv[]) {
@@ -96,6 +98,16 @@ void run_backend(sharedData *sh_data, char *argv[]) {
                 cout << "[ERROR] SET TX FREQ | ERR CODE: " << err << "\n";
             }
             sh_data->changed_tx_freq = false;
+        }
+
+        if (sh_data->changed_sample_rate) {
+            if (int err; (err = SoapySDRDevice_setSampleRate(sdr.sdr, SOAPY_SDR_RX, 0, sh_data->sample_rate)) != 0) {
+                cout << "[ERROR] SET RX SAMPLE RATE | ERR CODE: " << err << "\n";
+            }
+            if (int err; (err = SoapySDRDevice_setSampleRate(sdr.sdr, SOAPY_SDR_TX, 0, sh_data->sample_rate)) != 0) {
+                cout << "[ERROR] SET TX SAMPLE RATE | ERR CODE: " << err << "\n";
+            }
+            sh_data->changed_sample_rate = false;
         }
 
         cnt_of_buffers = i;
@@ -193,11 +205,14 @@ void run_gui(sharedData *sh_data) {
                     if (ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f)) {
                         sh_data->changed_tx_gain = true;
                     }
-                    if (ImGui::InputDouble("RX FREQUENCY", &sh_data->rx_frequency, 100)) {
+                    if (ImGui::InputDouble("RX FREQUENCY", &sh_data->rx_frequency, 1e2)) {
                         sh_data->changed_rx_freq = true;
                     }
-                    if (ImGui::InputDouble("TX FREQUENCY", &sh_data->tx_frequency, 100)) {
+                    if (ImGui::InputDouble("TX FREQUENCY", &sh_data->tx_frequency, 1e2)) {
                         sh_data->changed_tx_freq = true;
+                    }
+                    if (ImGui::InputDouble("SAMPLE RATE", &sh_data->sample_rate, 1e5)) {
+                        sh_data->changed_sample_rate = true;
                     }
                     ImGui::TreePop();
                 }
@@ -242,17 +257,6 @@ int main(int argc, char *argv[]) {
     (void) argc;
     sharedData sd;
     sd.datas.resize(1920 * 2);
-    sd.send = false;
-    sd.quit = false;
-    sd.changed_rx_gain = false;
-    sd.changed_tx_gain = false;
-    sd.changed_rx_freq = false;
-    sd.changed_tx_freq = false;
-    // sd.rx_gain = 25.f;
-    // sd.tx_gain = 50.f;
-    // sd.tx_frequency = 868e6;
-    // sd.rx_frequency = 868e6;
-
 
     std::thread gui_thread(run_gui, &sd);
     std::thread backend_thread(run_backend, &sd, argv);
