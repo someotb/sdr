@@ -193,10 +193,12 @@ void run_gui(sharedData *sh_data) {
                     if (ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f)) {
                         sh_data->changed_tx_gain = true;
                     }
-                    // ImGui::InputDouble("RX FREQUENCY", &sh_data->rx_frequency, 100);
-                    // sh_data->changed_rx_freq = true;
-                    // ImGui::InputInt("TX FREQUENCY", &sh_data->tx_frequency, 100);
-                    // sh_data->changed_tx_freq = true;
+                    if (ImGui::InputDouble("RX FREQUENCY", &sh_data->rx_frequency, 100)) {
+                        sh_data->changed_rx_freq = true;
+                    }
+                    if (ImGui::InputDouble("TX FREQUENCY", &sh_data->tx_frequency, 100)) {
+                        sh_data->changed_tx_freq = true;
+                    }
                     ImGui::TreePop();
                 }
                 ImGui::EndTabItem();
