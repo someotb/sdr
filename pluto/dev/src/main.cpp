@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <complex.h>
 #include <math.h>
+#include <string>
 #include <unistd.h>
 #include <vector>
 #include <string.h>
@@ -39,11 +40,15 @@ struct sharedData
     bool changed_rx_freq = false;
     bool changed_tx_freq = false;
     bool changed_sample_rate = false;
+    bool changed_rx_bandwidth = false;
+    bool changed_tx_bandwidth = false;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
     double rx_frequency = 826e6;
     double tx_frequency = 826e6;
     double sample_rate = 1e6;
+    float rx_bandwidth = 1e6;
+    float tx_bandwidth = 1e6;
 };
 
 void run_backend(sharedData *sh_data, char *argv[]) {
@@ -110,6 +115,21 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             sh_data->changed_sample_rate = false;
         }
 
+        if (sh_data->changed_rx_bandwidth) {
+            if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_bandwidth))) != 0) {
+                cout << "[ERROR] SET RX BANDWIDTH | ERR CODE: " << err << "\n";
+            }
+            sh_data->changed_rx_bandwidth = false;
+        }
+
+        if (sh_data->changed_tx_bandwidth) {
+            if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_bandwidth))) != 0) {
+                cout << "[ERROR] SET TX BANDWIDTH | ERR CODE: " << err << "\n";
+            }
+            sh_data->changed_tx_bandwidth = false;
+        }
+
+
         cnt_of_buffers = i;
         if (sh_data->quit) break;
 
@@ -142,6 +162,10 @@ void run_backend(sharedData *sh_data, char *argv[]) {
 void run_gui(sharedData *sh_data) {
     std::vector<int16_t> real(1920);
     std::vector<int16_t> imag(1920);
+    vector<float> bandwidths = {2e5f, 1e6f, 2e6f, 3e6f, 4e6f, 5e6f, 6e6f, 7e6f, 8e6f, 9e6f, 10e6f};
+    int cur_rx_bandwidth = 1;
+    int cur_tx_bandwidth = 1;
+
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     SDL_Window* window = SDL_CreateWindow(
@@ -213,6 +237,14 @@ void run_gui(sharedData *sh_data) {
                     }
                     if (ImGui::InputDouble("SAMPLE RATE", &sh_data->sample_rate, 1e5)) {
                         sh_data->changed_sample_rate = true;
+                    }
+                    if (ImGui::SliderInt("RX BANDWIDTH", &cur_rx_bandwidth, 0, bandwidths.size() - 1, to_string(bandwidths[cur_rx_bandwidth]).c_str())) {
+                        sh_data->rx_bandwidth = bandwidths[cur_rx_bandwidth];
+                        sh_data->changed_rx_bandwidth = true;
+                    }
+                    if (ImGui::SliderInt("TX BANDWIDTH", &cur_tx_bandwidth, 0, bandwidths.size() - 1, to_string(bandwidths[cur_tx_bandwidth]).c_str())) {
+                        sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];
+                        sh_data->changed_tx_bandwidth = true;
                     }
                     ImGui::TreePop();
                 }

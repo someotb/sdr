@@ -16,6 +16,7 @@ public:
     double frequency = 826e6;
     double rx_gain = 20.0;
     double tx_gain = 80.0;
+    double bandwidth = 1e6;
 
     std::vector<int16_t> rx_buffer;
     std::vector<int16_t> tx_buffer;
@@ -34,6 +35,9 @@ public:
         SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, frequency, NULL);
         SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_TX, 0, sample_rate);
         SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, frequency, NULL);
+
+        SoapySDRDevice_setBandwidth(sdr, SOAPY_SDR_RX, 0, bandwidth);
+        SoapySDRDevice_setBandwidth(sdr, SOAPY_SDR_TX, 0, bandwidth);
 
         SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, 0, rx_gain);
         SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, 0, tx_gain);
