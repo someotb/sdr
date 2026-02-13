@@ -21,8 +21,8 @@
 #include "implot.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
-#include "modulation.h"
-#include "sdr.h"
+#include "modulation.hpp"
+#include "sdr.hpp"
 
 constexpr int UPSAMPLE = 10;
 constexpr size_t N_BUFFERS = 1000000;
@@ -40,7 +40,7 @@ struct sharedData
     bool changed_tx_freq = false;
     bool changed_sample_rate = false;
     float rx_gain = 20.f;
-    float tx_gain = 82.f;
+    float tx_gain = 80.f;
     double rx_frequency = 826e6;
     double tx_frequency = 826e6;
     double sample_rate = 1e6;
@@ -48,7 +48,7 @@ struct sharedData
 
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
-    ModulationType modulation = ModulationType::QPSK;
+    ModulationType modulation = ModulationType::QAM16;
     int bits_size = bits_per_symbol(modulation);
     size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
 

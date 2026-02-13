@@ -1,4 +1,4 @@
-#include "modulation.h"
+#include "modulation.hpp"
 #include <stdexcept>
 
 // According to 3GPP TS 38.211 section 5.1.3:
