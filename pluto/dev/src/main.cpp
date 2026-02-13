@@ -38,10 +38,10 @@ struct sharedData
     bool changed_tx_gain;
     bool changed_rx_freq;
     bool changed_tx_freq;
-    float rx_gain;
-    float tx_gain;
-    double rx_frequency;
-    double tx_frequency;
+    float rx_gain = 20.f;
+    float tx_gain = 82.f;
+    double rx_frequency = 826e6;
+    double tx_frequency = 826e6;
 };
 
 void run_backend(sharedData *sh_data, char *argv[]) {
@@ -71,14 +71,14 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     cout << "[TX] " << "Transmission of '" << N_BUFFERS << "' buffers started:\n";
     for (size_t i = 0; i < N_BUFFERS; ++i) {
         if (sh_data->changed_rx_gain) {
-            if (int err; (err = SoapySDRDevice_setGainElement(sdr.sdr, SOAPY_SDR_RX, 0, "LNA", static_cast<double>(sh_data->rx_gain))) != 0) {
+            if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_gain))) != 0) {
                 cout << "[ERROR] SET RX GAIN | ERR CODE: " << err << "\n";
             }
             sh_data->changed_rx_gain = false;
         }
 
         if (sh_data->changed_tx_gain) {
-            if (int err; (err = SoapySDRDevice_setGainElement(sdr.sdr, SOAPY_SDR_TX, 0, "PDA", static_cast<double>(sh_data->tx_gain))) != 0) {
+            if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_gain))) != 0) {
                 cout << "[ERROR] SET TX GAIN | ERR CODE: " << err << "\n";
             }
             sh_data->changed_tx_gain = false;
@@ -187,10 +187,12 @@ void run_gui(sharedData *sh_data) {
             if (ImGui::BeginTabItem("TX CONFIG")) {
                 if (ImGui::TreeNodeEx("Transmission")) {
                     ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
-                    ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 0.f, 73.f);
-                    sh_data->changed_rx_gain = true;
-                    ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f);
-                    sh_data->changed_tx_gain = true;
+                    if (ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 0.f, 73.f)){
+                        sh_data->changed_rx_gain = true;
+                    }
+                    if (ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f)) {
+                        sh_data->changed_tx_gain = true;
+                    }
                     // ImGui::InputDouble("RX FREQUENCY", &sh_data->rx_frequency, 100);
                     // sh_data->changed_rx_freq = true;
                     // ImGui::InputInt("TX FREQUENCY", &sh_data->tx_frequency, 100);
@@ -244,10 +246,10 @@ int main(int argc, char *argv[]) {
     sd.changed_tx_gain = false;
     sd.changed_rx_freq = false;
     sd.changed_tx_freq = false;
-    sd.rx_gain = 25.f;
-    sd.tx_gain = 60.f;
-    sd.tx_frequency = 868e6;
-    sd.rx_frequency = 868e6;
+    // sd.rx_gain = 25.f;
+    // sd.tx_gain = 50.f;
+    // sd.tx_frequency = 868e6;
+    // sd.rx_frequency = 868e6;
 
 
     std::thread gui_thread(run_gui, &sd);
