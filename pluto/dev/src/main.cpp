@@ -36,7 +36,8 @@ struct sharedData
 {
     vector<int16_t> real_p;
     vector<int16_t> imag_p;
-    vector<double> magnitude;
+    vector<double> shifted_magnitude;
+    vector<double> frequency_axis;
     bool send = false;
     bool quit = false;
     bool changed_rx_gain = false;
@@ -53,10 +54,18 @@ struct sharedData
     double sample_rate = 1e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
+
+    sharedData(size_t rx_mtu) {
+        real_p.resize(rx_mtu, 0);
+        imag_p.resize(rx_mtu, 0);
+        shifted_magnitude.resize(rx_mtu, 0);
+        frequency_axis.resize(rx_mtu, 0);
+    }
 };
 
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
+
     ModulationType modulation = ModulationType::QAM16;
     int bits_size = bits_per_symbol(modulation);
     size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
@@ -65,10 +74,15 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     vector<complex<double>> symbols(bits.size() / bits_size);
     vector<complex<double>> impulse(UPSAMPLE, 1.0);
     vector<complex<double>> symbols_ups(sdr.tx_mtu * UPSAMPLE);
+    vector<double> magnitude(sdr.rx_mtu, 0);
 
     fftw_complex* in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
     fftw_complex* out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
     fftw_plan plan = fftw_plan_dft_1d(sdr.rx_mtu, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+
+    for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+        sh_data->frequency_axis[i] = (i - sdr.rx_mtu / 2.0) * sh_data->sample_rate / sdr.rx_mtu;
+    }
 
     for (size_t i = 0; i < bits.size(); i++) bits[i] = rand() % 2;
 
@@ -170,7 +184,12 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         for (size_t i = 0; i < sdr.rx_mtu; ++i) {
             double real = out[i][0];
             double imag = out[i][1];
-            sh_data->magnitude[i] = sqrt(real * real + imag * imag);
+            magnitude[i] = sqrt(real * real + imag * imag);
+        }
+
+        for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
+            sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
+            sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
         }
 
         long long tx_time = timeNs + TX_DELAY;
@@ -241,7 +260,7 @@ void run_gui(sharedData *sh_data) {
         }
 
         if (ImPlot::BeginPlot("Magnitude", Window_Size)) {
-            ImPlot::PlotLine("Magnitude", sh_data->magnitude.data(), sh_data->magnitude.size());
+            ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
             ImPlot::EndPlot();
         }
         ImGui::End();
@@ -313,11 +332,7 @@ void run_gui(sharedData *sh_data) {
 
 int main(int argc, char *argv[]) {
     (void) argc;
-    sharedData sd;
-
-    sd.real_p.resize(1920, 0);
-    sd.imag_p.resize(1920, 0);
-    sd.magnitude.resize(1920, 0);
+    sharedData sd(1920);
 
     std::thread gui_thread(run_gui, &sd);
     std::thread backend_thread(run_backend, &sd, argv);
