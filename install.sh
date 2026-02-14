@@ -7,3 +7,4 @@ sudo apt-get install -y \
   cmake g++ libpython3-dev libxml2 libxml2-dev bison flex libcdk5-dev \
   libusb-1.0-0-dev libaio-dev pkg-config libavahi-common-dev libavahi-client-dev \
   libsdl2-dev libgl1-mesa-dev libglew-dev
+sudo apt install -y libfftw3-dev

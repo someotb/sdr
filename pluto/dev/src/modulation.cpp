@@ -1,5 +1,12 @@
 #include "modulation.hpp"
+#include <cmath>
+#include <complex.h>
+#include <complex>
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
+#include <vector>
+#include <numbers>
 
 // According to 3GPP TS 38.211 section 5.1.3:
 void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, ModulationType modulation_type) {

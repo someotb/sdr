@@ -3,12 +3,14 @@
 #include <SoapySDR/Types.h>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <complex.h>
 #include <math.h>
 #include <string>
+#include <fftw3.h>
 #include <unistd.h>
 #include <vector>
 #include <string.h>
@@ -32,7 +34,8 @@ constexpr long long TX_DELAY = 4000000;
 
 struct sharedData
 {
-    std::vector<int16_t> datas;
+    vector<int16_t> datas;
+    vector<double> magnitude;
     bool send = false;
     bool quit = false;
     bool changed_rx_gain = false;
@@ -61,6 +64,12 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     vector<complex<double>> symbols(bits.size() / bits_size);
     vector<complex<double>> impulse(UPSAMPLE, 1.0);
     vector<complex<double>> symbols_ups(sdr.tx_mtu * UPSAMPLE);
+
+
+    fftw_complex* in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu / 2);
+    fftw_complex* out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu / 2);
+    fftw_plan plan = fftw_plan_dft_1d(sdr.rx_mtu / 2, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+    sh_data->magnitude.resize(sdr.rx_mtu / 2);
 
     for (size_t i = 0; i < bits.size(); i++) bits[i] = rand() % 2;
 
@@ -147,9 +156,21 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
         (void)sr;
 
+        for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
+            in[i][0] = static_cast<double>(sh_data->datas[2 * i]) / 32768.0;
+            in[i][1] = static_cast<double>(sh_data->datas[2 * i + 1]) / 32768.0;
+        }
+
+        fftw_execute(plan);
+
+        for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
+            double real = out[i][0];
+            double imag = out[i][1];
+            sh_data->magnitude[i] = sqrt(real * real + imag * imag);
+        }
+
         long long tx_time = timeNs + TX_DELAY;
         flags = SOAPY_SDR_HAS_TIME;
-
 
         if (sh_data->send) {
             int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
@@ -157,11 +178,14 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         }
     }
     cout << "[TX] " << "Transmission of '" << cnt_of_buffers << "' buffers complited\n";
+    fftw_destroy_plan(plan);
+    fftw_free(in);
+    fftw_free(out);
 }
 
 void run_gui(sharedData *sh_data) {
-    std::vector<int16_t> real(1920);
-    std::vector<int16_t> imag(1920);
+    std::vector<int16_t> real_p(1920);
+    std::vector<int16_t> imag_p(1920);
     vector<float> bandwidths = {2e5f, 1e6f, 2e6f, 3e6f, 4e6f, 5e6f, 6e6f, 7e6f, 8e6f, 9e6f, 10e6f};
     int cur_rx_bandwidth = 1;
     int cur_tx_bandwidth = 1;
@@ -203,17 +227,23 @@ void run_gui(sharedData *sh_data) {
         Window_Size.y -= 60;
         Window_Size.y /= 2;
         Window_Size.x -= 20;
+
         for (int i = 0; i < 1920; ++i) {
-            real[i] = sh_data->datas[2 * i];
-            imag[i] = sh_data->datas[2 * i + 1];
+            real_p[i] = sh_data->datas[2 * i];
+            imag_p[i] = sh_data->datas[2 * i + 1];
         }
-        if (ImPlot::BeginPlot("Scatter", Window_Size)) {
-            ImPlot::PlotScatter("I/Q", real.data(), imag.data(), 1920);
+        if (ImPlot::BeginPlot("Constellation Diagram", Window_Size)) {
+            ImPlot::PlotScatter("I/Q", real_p.data(), imag_p.data(), 1920);
             ImPlot::EndPlot();
         }
-        if (ImPlot::BeginPlot("Line", Window_Size)) {
-            ImPlot::PlotLine("I", real.data(), real.size());
-            ImPlot::PlotLine("Q", imag.data(), imag.size());
+        if (ImPlot::BeginPlot("I/Q samples", Window_Size)) {
+            ImPlot::PlotLine("I", real_p.data(), real_p.size());
+            ImPlot::PlotLine("Q", imag_p.data(), imag_p.size());
+            ImPlot::EndPlot();
+        }
+
+        if (ImPlot::BeginPlot("Magnitude", Window_Size)) {
+            ImPlot::PlotLine("Magnitude", sh_data->magnitude.data(), sh_data->magnitude.size());
             ImPlot::EndPlot();
         }
         ImGui::End();

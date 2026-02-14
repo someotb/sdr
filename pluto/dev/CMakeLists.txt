@@ -11,6 +11,7 @@ find_package(SoapySDR REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(SDL2 REQUIRED)
+find_library(FFTW_LIB fftw3)
 
 include_directories(${INCLUDE_DIR})
 include_directories(${SDL2_INCLUDE_DIRS})
@@ -47,6 +48,7 @@ add_executable(main ${MAIN_SOURCE_FILES})
 target_link_libraries(main PRIVATE
     imgui
     implot
+    ${FFTW_LIB}
     ${SDL2_LIBRARIES}
     ${OPENGL_LIBRARIES}
     ${GLEW_LIBRARIES}
