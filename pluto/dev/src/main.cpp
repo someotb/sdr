@@ -34,7 +34,8 @@ constexpr long long TX_DELAY = 4000000;
 
 struct sharedData
 {
-    vector<int16_t> datas;
+    vector<int16_t> real_p;
+    vector<int16_t> imag_p;
     vector<double> magnitude;
     bool send = false;
     bool quit = false;
@@ -65,11 +66,9 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     vector<complex<double>> impulse(UPSAMPLE, 1.0);
     vector<complex<double>> symbols_ups(sdr.tx_mtu * UPSAMPLE);
 
-
-    fftw_complex* in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu / 2);
-    fftw_complex* out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu / 2);
-    fftw_plan plan = fftw_plan_dft_1d(sdr.rx_mtu / 2, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-    sh_data->magnitude.resize(sdr.rx_mtu / 2);
+    fftw_complex* in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
+    fftw_complex* out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
+    fftw_plan plan = fftw_plan_dft_1d(sdr.rx_mtu, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
     for (size_t i = 0; i < bits.size(); i++) bits[i] = rand() % 2;
 
@@ -147,7 +146,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             cout << "[TX] " << "Minutes: " << setw(2) << setfill('0') << (sec / 60) << ":" << setw(2) << setfill('0') << (sec % 60) << " | Buffers: " << i << endl;
         }
 
-        void *rx_buffs[] = {sh_data->datas.data()};
+        void *rx_buffs[] = {sdr.rx_buffer.data()};
         const void *tx_buffs[] = {sdr.tx_buffer.data()};
 
         int flags = 0;
@@ -156,14 +155,19 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
         (void)sr;
 
-        for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
-            in[i][0] = static_cast<double>(sh_data->datas[2 * i]) / 32768.0;
-            in[i][1] = static_cast<double>(sh_data->datas[2 * i + 1]) / 32768.0;
+        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+            sh_data->real_p[i] = sdr.rx_buffer[2 * i];
+            sh_data->imag_p[i] = sdr.rx_buffer[2 * i + 1];
+        }
+
+        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+            in[i][0] = static_cast<double>(sdr.rx_buffer[2 * i]) / 32768.0;
+            in[i][1] = static_cast<double>(sdr.rx_buffer[2 * i + 1]) / 32768.0;
         }
 
         fftw_execute(plan);
 
-        for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
+        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
             double real = out[i][0];
             double imag = out[i][1];
             sh_data->magnitude[i] = sqrt(real * real + imag * imag);
@@ -184,8 +188,6 @@ void run_backend(sharedData *sh_data, char *argv[]) {
 }
 
 void run_gui(sharedData *sh_data) {
-    std::vector<int16_t> real_p(1920);
-    std::vector<int16_t> imag_p(1920);
     vector<float> bandwidths = {2e5f, 1e6f, 2e6f, 3e6f, 4e6f, 5e6f, 6e6f, 7e6f, 8e6f, 9e6f, 10e6f};
     int cur_rx_bandwidth = 1;
     int cur_tx_bandwidth = 1;
@@ -228,17 +230,13 @@ void run_gui(sharedData *sh_data) {
         Window_Size.y /= 2;
         Window_Size.x -= 20;
 
-        for (int i = 0; i < 1920; ++i) {
-            real_p[i] = sh_data->datas[2 * i];
-            imag_p[i] = sh_data->datas[2 * i + 1];
-        }
         if (ImPlot::BeginPlot("Constellation Diagram", Window_Size)) {
-            ImPlot::PlotScatter("I/Q", real_p.data(), imag_p.data(), 1920);
+            ImPlot::PlotScatter("I/Q", sh_data->real_p.data(), sh_data->imag_p.data(), 1920);
             ImPlot::EndPlot();
         }
         if (ImPlot::BeginPlot("I/Q samples", Window_Size)) {
-            ImPlot::PlotLine("I", real_p.data(), real_p.size());
-            ImPlot::PlotLine("Q", imag_p.data(), imag_p.size());
+            ImPlot::PlotLine("I", sh_data->real_p.data(), sh_data->real_p.size());
+            ImPlot::PlotLine("Q", sh_data->imag_p.data(), sh_data->imag_p.size());
             ImPlot::EndPlot();
         }
 
@@ -290,8 +288,6 @@ void run_gui(sharedData *sh_data) {
                 }
                 ImGui::EndTabItem();
             }
-
-
             ImGui::EndTabBar();
         }
         ImGui::End();
@@ -318,7 +314,10 @@ void run_gui(sharedData *sh_data) {
 int main(int argc, char *argv[]) {
     (void) argc;
     sharedData sd;
-    sd.datas.resize(1920 * 2);
+
+    sd.real_p.resize(1920, 0);
+    sd.imag_p.resize(1920, 0);
+    sd.magnitude.resize(1920, 0);
 
     std::thread gui_thread(run_gui, &sd);
     std::thread backend_thread(run_backend, &sd, argv);
