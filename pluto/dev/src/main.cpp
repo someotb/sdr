@@ -37,6 +37,7 @@ struct sharedData
     vector<int16_t> real_p;
     vector<int16_t> imag_p;
     vector<double> shifted_magnitude;
+    vector<double> argument;
     vector<double> frequency_axis;
     bool send = false;
     bool quit = false;
@@ -59,6 +60,7 @@ struct sharedData
         real_p.resize(rx_mtu, 0);
         imag_p.resize(rx_mtu, 0);
         shifted_magnitude.resize(rx_mtu, 0);
+        argument.resize(rx_mtu, 0);
         frequency_axis.resize(rx_mtu, 0);
     }
 };
@@ -185,12 +187,14 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             double real = out[i][0];
             double imag = out[i][1];
             magnitude[i] = sqrt(real * real + imag * imag);
+            sh_data->argument[i] = atan2(imag, real);
         }
 
         for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
             sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
             sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
         }
+
 
         long long tx_time = timeNs + TX_DELAY;
         flags = SOAPY_SDR_HAS_TIME;
@@ -227,7 +231,6 @@ void run_gui(sharedData *sh_data) {
 
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init("#version 330");
-    ImVec2 Window_Size = ImVec2(1920, 1080);
 
     bool running = true;
     while (running) {
@@ -243,26 +246,34 @@ void run_gui(sharedData *sh_data) {
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
-        ImGui::Begin("Graphs");
-        Window_Size = ImGui::GetWindowSize();
-        Window_Size.y -= 60;
-        Window_Size.y /= 2;
-        Window_Size.x -= 20;
 
-        if (ImPlot::BeginPlot("Constellation Diagram", Window_Size)) {
-            ImPlot::PlotScatter("I/Q", sh_data->real_p.data(), sh_data->imag_p.data(), 1920);
-            ImPlot::EndPlot();
-        }
-        if (ImPlot::BeginPlot("I/Q samples", Window_Size)) {
-            ImPlot::PlotLine("I", sh_data->real_p.data(), sh_data->real_p.size());
-            ImPlot::PlotLine("Q", sh_data->imag_p.data(), sh_data->imag_p.size());
-            ImPlot::EndPlot();
-        }
+        ImGui::Begin("Constellation Diagram");
+            if (ImPlot::BeginPlot("Constellation Diagram")) {
+                ImPlot::PlotScatter("I/Q", sh_data->real_p.data(), sh_data->imag_p.data(), sh_data->imag_p.size());
+                ImPlot::EndPlot();
+            }
+        ImGui::End();
 
-        if (ImPlot::BeginPlot("Magnitude", Window_Size)) {
-            ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
-            ImPlot::EndPlot();
-        }
+        ImGui::Begin("I/Q samples");
+            if (ImPlot::BeginPlot("I/Q samples")) {
+                ImPlot::PlotLine("I", sh_data->real_p.data(), sh_data->real_p.size());
+                ImPlot::PlotLine("Q", sh_data->imag_p.data(), sh_data->imag_p.size());
+                ImPlot::EndPlot();
+            }
+        ImGui::End();
+
+        ImGui::Begin("Magnitude");
+            if (ImPlot::BeginPlot("Magnitude")) {
+                ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
+                ImPlot::EndPlot();
+            }
+        ImGui::End();
+
+        ImGui::Begin("Argument");
+            if (ImPlot::BeginPlot("Argument")) {
+                ImPlot::PlotLine("Argument", sh_data->frequency_axis.data(), sh_data->argument.data(), sh_data->argument.size());
+                ImPlot::EndPlot();
+            }
         ImGui::End();
 
         ImGui::Begin("Settings");
