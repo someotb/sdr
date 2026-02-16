@@ -172,13 +172,8 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         (void)sr;
 
         for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-            sh_data->real_p[i] = sdr.rx_buffer[2 * i];
-            sh_data->imag_p[i] = sdr.rx_buffer[2 * i + 1];
-        }
-
-        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-            in[i][0] = static_cast<double>(sdr.rx_buffer[2 * i]) / 32768.0;
-            in[i][1] = static_cast<double>(sdr.rx_buffer[2 * i + 1]) / 32768.0;
+            in[i][0] = static_cast<double>(sdr.rx_buffer[2 * i] / 32768.0);
+            in[i][1] = static_cast<double>(sdr.rx_buffer[2 * i + 1] / 32768.0);
         }
 
         fftw_execute(plan);
@@ -186,7 +181,9 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         for (size_t i = 0; i < sdr.rx_mtu; ++i) {
             double real = out[i][0];
             double imag = out[i][1];
-            magnitude[i] = sqrt(real * real + imag * imag);
+            magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / 1920.0) + 1e-12;
+            sh_data->real_p[i] = sdr.rx_buffer[2 * i];
+            sh_data->imag_p[i] = sdr.rx_buffer[2 * i + 1];
             sh_data->argument[i] = atan2(imag, real);
         }
 
@@ -194,7 +191,6 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
             sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
         }
-
 
         long long tx_time = timeNs + TX_DELAY;
         flags = SOAPY_SDR_HAS_TIME;
