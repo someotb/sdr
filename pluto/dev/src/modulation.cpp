@@ -72,11 +72,61 @@ void filter(vector<complex<double>>& symbols_ups, const vector<complex<double>>&
     symbols_ups.swap(output);
 }
 
+void filter_int16_t(vector<int16_t>& symbols_ups, const vector<int16_t>& impulse, vector<int16_t>& output) {
+    size_t n = symbols_ups.size();
+    size_t L = impulse.size();
+
+    for (size_t i = 0; i < n; i++) {
+        size_t max_j = min(L, i + 1);
+        for (size_t j = 0; j < max_j; j++) {
+            output[i] += impulse[j] * symbols_ups[i - j];
+        }
+    }
+}
+
 int bits_per_symbol(ModulationType type) {
     switch(type) {
         case ModulationType::BPSK: return 1;
         case ModulationType::QPSK: return 2;
         case ModulationType::QAM16: return 4;
         default: throw std::invalid_argument("Unsapported modulation type");
+    }
+}
+
+void symbols_sync(const vector<int16_t>& rx_buffer_after_convolve, vector<int>& offset) {
+    vector<int16_t> impulse(10, 1);
+    vector<int16_t> real_pa(rx_buffer_after_convolve.size() / 2);
+    vector<int16_t> imag_pa(rx_buffer_after_convolve.size() / 2);
+    
+    float BnTs = 0.001f;
+    double zeta = sqrt(2.0)/2.0;
+    int Nsp = 10;
+    int tmp_offset = 0;
+
+    for (size_t i = 0; i < rx_buffer_after_convolve.size() / 2; ++i) {
+        real_pa[i] = rx_buffer_after_convolve[2 * i];
+        imag_pa[i] = rx_buffer_after_convolve[2 * i + 1];
+    }
+
+    double teta = (BnTs / 10) / (zeta + 1.0 / (4.0 * zeta));
+    double Kp = 4.0;
+    double K1 = (-4 * zeta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
+    double K2 = (-4 * teta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
+
+    for (size_t ns = 0; ns < rx_buffer_after_convolve.size(); ns += 10) {
+        int n = tmp_offset;
+        int16_t real_part = (real_pa[ns + n] - real_pa[Nsp + ns + n]) * real_pa[n + static_cast<int>(Nsp / 2) + ns];
+        int16_t imag_part = (imag_pa[ns + n] - imag_pa[Nsp + ns + n]) * imag_pa[n + static_cast<int>(Nsp / 2) + ns];
+        int16_t error = real_part + imag_part;
+
+        int16_t p1 = error * K1;
+        int16_t p2 = p2 + p1 + error * K2;
+
+        while(p2 > 1) p2 -= 1;
+        while(p2 < 1) p2 += 1;
+
+        tmp_offset = round(p2 * Nsp);
+
+        offset[ns / 10] = tmp_offset;
     }
 }

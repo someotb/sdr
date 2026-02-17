@@ -34,8 +34,11 @@ constexpr long long TX_DELAY = 4000000;
 
 struct sharedData
 {
+    vector<int16_t> real_p_aft_con;
+    vector<int16_t> imag_p_aft_con;
     vector<int16_t> real_p;
     vector<int16_t> imag_p;
+    vector<int> offset;
     vector<double> shifted_magnitude;
     vector<double> argument;
     vector<double> frequency_axis;
@@ -57,6 +60,9 @@ struct sharedData
     float tx_bandwidth = 1e6;
 
     sharedData(size_t rx_mtu) {
+        real_p_aft_con.resize(rx_mtu, 0);
+        imag_p_aft_con.resize(rx_mtu, 0);
+        offset.resize(rx_mtu / 10, 0);
         real_p.resize(rx_mtu, 0);
         imag_p.resize(rx_mtu, 0);
         shifted_magnitude.resize(rx_mtu, 0);
@@ -68,11 +74,13 @@ struct sharedData
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
 
-    ModulationType modulation = ModulationType::QAM16;
+    ModulationType modulation = ModulationType::QPSK;
     int bits_size = bits_per_symbol(modulation);
     size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
 
     vector<int16_t> bits(max_symbols * bits_size);
+    vector<int16_t> impulse_int16_t(UPSAMPLE, 1);
+    vector<int16_t> rx_buffer_after_conv(sdr.rx_buffer.size(), 0);
     vector<complex<double>> symbols(bits.size() / bits_size);
     vector<complex<double>> impulse(UPSAMPLE, 1.0);
     vector<complex<double>> symbols_ups(sdr.tx_mtu * UPSAMPLE);
@@ -96,9 +104,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         sdr.tx_buffer[2*i] = (real(symbols_ups[i]) * 16000);
         sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
     }
-    int buffers_per_second = sdr.sample_rate/sdr.tx_mtu;
-    int sec = 0;
-    int cnt_of_buffers = 0;
+
     cout << "[TX] " << "Transmission of '" << N_BUFFERS << "' buffers started:\n";
     for (size_t i = 0; i < N_BUFFERS; ++i) {
         if (sh_data->changed_rx_gain) {
@@ -153,14 +159,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             sh_data->changed_tx_bandwidth = false;
         }
 
-
-        cnt_of_buffers = i;
         if (sh_data->quit) break;
-
-        if (i % buffers_per_second == 0 && i != 0) {
-            sec++;
-            cout << "[TX] " << "Minutes: " << setw(2) << setfill('0') << (sec / 60) << ":" << setw(2) << setfill('0') << (sec % 60) << " | Buffers: " << i << endl;
-        }
 
         void *rx_buffs[] = {sdr.rx_buffer.data()};
         const void *tx_buffs[] = {sdr.tx_buffer.data()};
@@ -199,8 +198,17 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
             (void)st;
         }
+
+        filter_int16_t(sdr.rx_buffer, impulse_int16_t, rx_buffer_after_conv);
+
+        for (size_t i = 0; i < rx_buffer_after_conv.size(); ++i) {
+            sh_data->real_p_aft_con[i] = rx_buffer_after_conv[i * 2];
+            sh_data->imag_p_aft_con[i] = rx_buffer_after_conv[i * 2 + 1];
+        }
+
+        symbols_sync(rx_buffer_after_conv, sh_data->offset);
     }
-    cout << "[TX] " << "Transmission of '" << cnt_of_buffers << "' buffers complited\n";
+    cout << "[TX] " << "Transmission complited\n";
     fftw_destroy_plan(plan);
     fftw_free(in);
     fftw_free(out);
@@ -250,6 +258,13 @@ void run_gui(sharedData *sh_data) {
             }
         ImGui::End();
 
+        ImGui::Begin("Constellation Diagram After Convolve");
+            if (ImPlot::BeginPlot("Constellation Diagram After Convolve")) {
+                ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_con.data(), sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
+                ImPlot::EndPlot();
+            }
+        ImGui::End();
+
         ImGui::Begin("I/Q samples");
             if (ImPlot::BeginPlot("I/Q samples")) {
                 ImPlot::PlotLine("I", sh_data->real_p.data(), sh_data->real_p.size());
@@ -270,6 +285,13 @@ void run_gui(sharedData *sh_data) {
                 ImPlot::PlotLine("Argument", sh_data->frequency_axis.data(), sh_data->argument.data(), sh_data->argument.size());
                 ImPlot::EndPlot();
             }
+        ImGui::End();
+
+        ImGui::Begin("Offset");
+        if (ImPlot::BeginPlot("Offset")) {
+            ImPlot::PlotLine("Offset", sh_data->offset.data(), sh_data->offset.size());
+            ImPlot::EndPlot();
+        }
         ImGui::End();
 
         ImGui::Begin("Settings");
@@ -318,7 +340,7 @@ void run_gui(sharedData *sh_data) {
         }
         ImGui::End();
 
-        ImGui::ShowDemoWindow();
+        // ImGui::ShowDemoWindow();
 
         ImGui::Render();
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);

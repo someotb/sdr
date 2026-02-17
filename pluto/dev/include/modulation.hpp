@@ -48,3 +48,7 @@ void filter(vector<complex<double>>& symbols_ups, const vector<complex<double>>&
   */
 
 int bits_per_symbol(ModulationType type);
+
+void filter_int16_t(vector<int16_t>& symbols_ups, const vector<int16_t>& impulse, vector<int16_t>& output);
+
+void symbols_sync(const vector<int16_t>& rx_buffer_after_convolve, vector<int>& offset);
