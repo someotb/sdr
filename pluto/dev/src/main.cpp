@@ -58,7 +58,7 @@ struct sharedData
     double sample_rate = 1e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
-    double BnTs = 0.0001f;
+    double BnTs = 0.0;
 
     sharedData(size_t rx_mtu) {
         real_p_aft_con_offset.resize(rx_mtu / 10, 0);
@@ -108,7 +108,6 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
     }
 
-    cout << "[TX] " << "Transmission of '" << N_BUFFERS << "' buffers started:\n";
     for (size_t i = 0; i < N_BUFFERS; ++i) {
         if (sh_data->changed_rx_gain) {
             if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_gain))) != 0) {
@@ -292,6 +291,14 @@ void run_gui(sharedData *sh_data) {
             }
         ImGui::End();
 
+        ImGui::Begin("I/Q samples After Convolve and Offset");
+            if (ImPlot::BeginPlot("I/Q samples After Convolve and Offset")) {
+                ImPlot::PlotLine("I", sh_data->real_p_aft_con_offset.data(), sh_data->real_p_aft_con_offset.size());
+                ImPlot::PlotLine("Q", sh_data->imag_p_aft_con_offset.data(), sh_data->imag_p_aft_con_offset.size());
+                ImPlot::EndPlot();
+            }
+        ImGui::End();
+
         ImGui::Begin("I/Q samples After Convolve");
             if (ImPlot::BeginPlot("I/Q samples After Convolve")) {
                 ImPlot::PlotLine("I", sh_data->real_p_aft_con.data(), sh_data->real_p_aft_con.size());
@@ -349,7 +356,7 @@ void run_gui(sharedData *sh_data) {
                         sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];
                         sh_data->changed_tx_bandwidth = true;
                     }
-                    ImGui::InputDouble("BnTs VALUE", &sh_data->BnTs, 0.0001);
+                    ImGui::InputDouble("BnTs VALUE", &sh_data->BnTs, 1e-7);
                     ImGui::TreePop();
                 }
                 ImGui::EndTabItem();

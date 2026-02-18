@@ -109,8 +109,8 @@ void symbols_sync(const vector<int16_t>& rx_buffer_after_convolve, vector<int>& 
 
     double teta = (BnTs / 10) / (zeta + 1.0 / (4.0 * zeta));
     double Kp = 4.0;
-    double K1 = (-4 * zeta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
-    double K2 = (-4 * teta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
+    double K1 = (4 * zeta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
+    double K2 = (4 * teta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
 
     for (size_t ns = 0; ns < rx_buffer_after_convolve.size() / 2; ns += 10) {
         int n = tmp_offset;
