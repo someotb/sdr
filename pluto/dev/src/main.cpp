@@ -3,13 +3,11 @@
 #include <SoapySDR/Types.h>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <complex.h>
 #include <math.h>
-#include <string>
 #include <fftw3.h>
 #include <unistd.h>
 #include <vector>
@@ -36,6 +34,8 @@ struct sharedData
 {
     vector<int16_t> real_p_aft_con;
     vector<int16_t> imag_p_aft_con;
+    vector<int16_t> real_p_aft_con_offset;
+    vector<int16_t> imag_p_aft_con_offset;
     vector<int16_t> real_p;
     vector<int16_t> imag_p;
     vector<int> offset;
@@ -58,8 +58,11 @@ struct sharedData
     double sample_rate = 1e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
+    double BnTs = 0.0001f;
 
     sharedData(size_t rx_mtu) {
+        real_p_aft_con_offset.resize(rx_mtu / 10, 0);
+        imag_p_aft_con_offset.resize(rx_mtu / 10, 0);
         real_p_aft_con.resize(rx_mtu, 0);
         imag_p_aft_con.resize(rx_mtu, 0);
         offset.resize(rx_mtu / 10, 0);
@@ -74,7 +77,7 @@ struct sharedData
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
 
-    ModulationType modulation = ModulationType::QPSK;
+    ModulationType modulation = ModulationType::QAM16;
     int bits_size = bits_per_symbol(modulation);
     size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
 
@@ -201,12 +204,21 @@ void run_backend(sharedData *sh_data, char *argv[]) {
 
         filter_int16_t(sdr.rx_buffer, impulse_int16_t, rx_buffer_after_conv);
 
-        for (size_t i = 0; i < rx_buffer_after_conv.size(); ++i) {
+        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
             sh_data->real_p_aft_con[i] = rx_buffer_after_conv[i * 2];
             sh_data->imag_p_aft_con[i] = rx_buffer_after_conv[i * 2 + 1];
         }
 
-        symbols_sync(rx_buffer_after_conv, sh_data->offset);
+        symbols_sync(rx_buffer_after_conv, sh_data->offset, sh_data->BnTs);
+
+        for (size_t i = 0; i + 10 < rx_buffer_after_conv.size() / 2; i += 10) {
+            size_t k = i + sh_data->offset[i / 10];
+
+            if (k >= rx_buffer_after_conv.size() / 2) break;
+
+            sh_data->real_p_aft_con_offset[i / 10] = rx_buffer_after_conv[2 * k];
+            sh_data->imag_p_aft_con_offset[i / 10] = rx_buffer_after_conv[2 * k + 1];
+        }
     }
     cout << "[TX] " << "Transmission complited\n";
     fftw_destroy_plan(plan);
@@ -261,6 +273,13 @@ void run_gui(sharedData *sh_data) {
         ImGui::Begin("Constellation Diagram After Convolve");
             if (ImPlot::BeginPlot("Constellation Diagram After Convolve")) {
                 ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_con.data(), sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
+                ImPlot::EndPlot();
+            }
+        ImGui::End();
+
+        ImGui::Begin("Constellation Diagram After Convolve and Offset");
+            if (ImPlot::BeginPlot("Constellation Diagram After Convolve and Offset")) {
+                ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_con_offset.data(), sh_data->imag_p_aft_con_offset.data(), sh_data->imag_p_aft_con_offset.size());
                 ImPlot::EndPlot();
             }
         ImGui::End();
@@ -322,6 +341,7 @@ void run_gui(sharedData *sh_data) {
                         sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];
                         sh_data->changed_tx_bandwidth = true;
                     }
+                    ImGui::InputDouble("BnTs VALUE", &sh_data->BnTs, 0.0001);
                     ImGui::TreePop();
                 }
                 ImGui::EndTabItem();

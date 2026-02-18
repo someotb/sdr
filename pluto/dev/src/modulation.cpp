@@ -1,12 +1,10 @@
 #include "modulation.hpp"
 #include <cmath>
 #include <complex.h>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
-#include <numbers>
 
 // According to 3GPP TS 38.211 section 5.1.3:
 void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, ModulationType modulation_type) {
@@ -75,7 +73,7 @@ void filter(vector<complex<double>>& symbols_ups, const vector<complex<double>>&
 void filter_int16_t(vector<int16_t>& symbols_ups, const vector<int16_t>& impulse, vector<int16_t>& output) {
     size_t n = symbols_ups.size();
     size_t L = impulse.size();
-
+    fill(output.begin(), output.end(), 0);
     for (size_t i = 0; i < n; i++) {
         size_t max_j = min(L, i + 1);
         for (size_t j = 0; j < max_j; j++) {
@@ -93,15 +91,15 @@ int bits_per_symbol(ModulationType type) {
     }
 }
 
-void symbols_sync(const vector<int16_t>& rx_buffer_after_convolve, vector<int>& offset) {
-    vector<int16_t> impulse(10, 1);
-    vector<int16_t> real_pa(rx_buffer_after_convolve.size() / 2);
-    vector<int16_t> imag_pa(rx_buffer_after_convolve.size() / 2);
-    
-    float BnTs = 0.001f;
+void symbols_sync(const vector<int16_t>& rx_buffer_after_convolve, vector<int>& offset, double& BnTs) {
+    vector<double> impulse(10, 1);
+    vector<double> real_pa(rx_buffer_after_convolve.size() / 2);
+    vector<double> imag_pa(rx_buffer_after_convolve.size() / 2);
+
     double zeta = sqrt(2.0)/2.0;
     int Nsp = 10;
     int tmp_offset = 0;
+    double p2 = 0;
 
     for (size_t i = 0; i < rx_buffer_after_convolve.size() / 2; ++i) {
         real_pa[i] = rx_buffer_after_convolve[2 * i];
@@ -113,19 +111,22 @@ void symbols_sync(const vector<int16_t>& rx_buffer_after_convolve, vector<int>& 
     double K1 = (-4 * zeta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
     double K2 = (-4 * teta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
 
-    for (size_t ns = 0; ns < rx_buffer_after_convolve.size(); ns += 10) {
+    for (size_t ns = 0; ns < rx_buffer_after_convolve.size() / 2; ns += 10) {
         int n = tmp_offset;
-        int16_t real_part = (real_pa[ns + n] - real_pa[Nsp + ns + n]) * real_pa[n + static_cast<int>(Nsp / 2) + ns];
-        int16_t imag_part = (imag_pa[ns + n] - imag_pa[Nsp + ns + n]) * imag_pa[n + static_cast<int>(Nsp / 2) + ns];
-        int16_t error = real_part + imag_part;
 
-        int16_t p1 = error * K1;
-        int16_t p2 = p2 + p1 + error * K2;
+        if (ns + n + Nsp >= real_pa.size()) break;
 
-        while(p2 > 1) p2 -= 1;
-        while(p2 < 1) p2 += 1;
+        double real_part = (real_pa[ns + n] - real_pa[Nsp + ns + n]) * real_pa[n + static_cast<int>(Nsp / 2) + ns];
+        double imag_part = (imag_pa[ns + n] - imag_pa[Nsp + ns + n]) * imag_pa[n + static_cast<int>(Nsp / 2) + ns];
+        double error = real_part + imag_part;
 
-        tmp_offset = round(p2 * Nsp);
+        double p1 = error * K1;
+        p2 += p1 + error * K2;
+
+        while(p2 > 1.0) p2 -= 1.0;
+        while(p2 < 0.0) p2 += 1.0;
+
+        tmp_offset = static_cast<int>(floor(p2 * Nsp));
 
         offset[ns / 10] = tmp_offset;
     }

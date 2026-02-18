@@ -60,6 +60,7 @@ public:
     }
 
     ~SDRDevice() {
+        std::cout << "SDRDevice destructor called\n";
         if (sdr) {
             if (rxStream) {
                 SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);
