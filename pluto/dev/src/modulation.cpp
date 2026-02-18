@@ -1,8 +1,11 @@
 #include "modulation.hpp"
+#include <algorithm>
 #include <cmath>
 #include <complex.h>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <numeric>
 #include <stdexcept>
 #include <vector>
 
@@ -92,7 +95,12 @@ void filter_int16_t(vector<int16_t>& symbols_ups, const vector<int16_t>& impulse
     }
 }
 
-void symbols_sync(const vector<int16_t>& rx_buffer_after_convolve, vector<int>& offset, double& BnTs) {
+void norm(std::vector<double>& rx) {
+    double scale = 1.0 / 32768.0;
+    for (size_t i = 0; i < rx.size(); ++i) rx[i] *= scale;
+}
+
+void symbols_sync(const vector<double>& rx_buffer_after_convolve, vector<int>& offset, double& BnTs, double& Kp) {
     vector<double> impulse(10, 1);
     vector<double> real_pa(rx_buffer_after_convolve.size() / 2);
     vector<double> imag_pa(rx_buffer_after_convolve.size() / 2);
@@ -100,15 +108,14 @@ void symbols_sync(const vector<int16_t>& rx_buffer_after_convolve, vector<int>& 
     double zeta = sqrt(2.0)/2.0;
     int Nsp = 10;
     int tmp_offset = 0;
-    double p2 = 0;
+    double p2 = 0.0;
 
     for (size_t i = 0; i < rx_buffer_after_convolve.size() / 2; ++i) {
         real_pa[i] = rx_buffer_after_convolve[2 * i];
         imag_pa[i] = rx_buffer_after_convolve[2 * i + 1];
     }
 
-    double teta = (BnTs / 10) / (zeta + 1.0 / (4.0 * zeta));
-    double Kp = 4.0;
+    double teta = (BnTs / Nsp) / (zeta + 1.0 / (4.0 * zeta));
     double K1 = (4 * zeta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
     double K2 = (4 * teta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
 

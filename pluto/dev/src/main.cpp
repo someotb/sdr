@@ -34,8 +34,8 @@ struct sharedData
 {
     vector<int16_t> real_p_aft_con;
     vector<int16_t> imag_p_aft_con;
-    vector<int16_t> real_p_aft_con_offset;
-    vector<int16_t> imag_p_aft_con_offset;
+    vector<double> real_p_aft_con_offset;
+    vector<double> imag_p_aft_con_offset;
     vector<int16_t> real_p;
     vector<int16_t> imag_p;
     vector<int> offset;
@@ -60,6 +60,7 @@ struct sharedData
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
     double BnTs = 0.0;
+    double Kp = 1.0;
 
     sharedData(size_t rx_mtu) {
         real_p_aft_con_offset.resize(rx_mtu / 10, 0);
@@ -210,14 +211,16 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         }
 
         if (sh_data->symb_sync) {
-            symbols_sync(rx_buffer_after_conv, sh_data->offset, sh_data->BnTs);
-            for (size_t i = 0; i + 10 < rx_buffer_after_conv.size() / 2; i += 10) {
+            vector<double> rx_buf_double(rx_buffer_after_conv.begin(), rx_buffer_after_conv.end());
+            norm(rx_buf_double);
+            symbols_sync(rx_buf_double, sh_data->offset, sh_data->BnTs, sh_data->Kp);
+            for (size_t i = 0; i + 10 < rx_buf_double.size() / 2; i += 10) {
                 size_t k = i + sh_data->offset[i / 10];
 
-                if (k >= rx_buffer_after_conv.size() / 2) break;
+                if (k >= rx_buf_double.size() / 2) break;
 
-                sh_data->real_p_aft_con_offset[i / 10] = rx_buffer_after_conv[2 * k];
-                sh_data->imag_p_aft_con_offset[i / 10] = rx_buffer_after_conv[2 * k + 1];
+                sh_data->real_p_aft_con_offset[i / 10] = rx_buf_double[2 * k];
+                sh_data->imag_p_aft_con_offset[i / 10] = rx_buf_double[2 * k + 1];
             }
         }
     }
@@ -332,8 +335,8 @@ void run_gui(sharedData *sh_data) {
 
         ImGui::Begin("Settings");
         if (ImGui::BeginTabBar("Control Panel")) {
-            if (ImGui::BeginTabItem("CONFIG")) {
-                if (ImGui::TreeNodeEx("SDR CONFIG")) {
+            if (ImGui::BeginTabItem("Config")) {
+                if (ImGui::TreeNodeEx("SDR Config")) {
                     ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
                     if (ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 0.f, 73.f)){
                         sh_data->changed_rx_gain = true;
@@ -363,14 +366,15 @@ void run_gui(sharedData *sh_data) {
 
                 if (ImGui::TreeNodeEx("Symbolic synchronization")) {
                     ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
-                    ImGui::InputDouble("BnTs VALUE", &sh_data->BnTs, 1e-7);
+                    ImGui::InputDouble("BnTs VALUE", &sh_data->BnTs, 1, 1e1);
+                    ImGui::InputDouble("Kp VALUE", &sh_data->Kp, 1, 1e1);
                     ImGui::TreePop();
                 }
 
                 ImGui::EndTabItem();
             }
 
-            if (ImGui::BeginTabItem("VIEW")) {
+            if (ImGui::BeginTabItem("View")) {
                 if (ImGui::TreeNodeEx("Theme Color")) {
                     if (ImGui::Button("Light")) ImGui::StyleColorsLight();
                     if (ImGui::Button("Dark")) ImGui::StyleColorsDark();
