@@ -77,7 +77,7 @@ struct sharedData
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
 
-    ModulationType modulation = ModulationType::QAM16;
+    ModulationType modulation = ModulationType::QPSK;
     int bits_size = bits_per_symbol(modulation);
     size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
 
@@ -288,6 +288,14 @@ void run_gui(sharedData *sh_data) {
             if (ImPlot::BeginPlot("I/Q samples")) {
                 ImPlot::PlotLine("I", sh_data->real_p.data(), sh_data->real_p.size());
                 ImPlot::PlotLine("Q", sh_data->imag_p.data(), sh_data->imag_p.size());
+                ImPlot::EndPlot();
+            }
+        ImGui::End();
+
+        ImGui::Begin("I/Q samples After Convolve");
+            if (ImPlot::BeginPlot("I/Q samples After Convolve")) {
+                ImPlot::PlotLine("I", sh_data->real_p_aft_con.data(), sh_data->real_p_aft_con.size());
+                ImPlot::PlotLine("Q", sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
                 ImPlot::EndPlot();
             }
         ImGui::End();

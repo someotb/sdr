@@ -46,6 +46,15 @@ void modulate(const vector<int16_t>& bits, vector<complex<double>>& symbols, Mod
     }
 }
 
+int bits_per_symbol(ModulationType type) {
+    switch(type) {
+        case ModulationType::BPSK: return 1;
+        case ModulationType::QPSK: return 2;
+        case ModulationType::QAM16: return 4;
+        default: throw std::invalid_argument("Unsapported modulation type");
+    }
+}
+
 void UpSampler(const vector<complex<double>>& symbols, vector<complex<double>>& symbols_ups, int L) {
     const complex<double> i0 (0, 0);
     size_t len_symbols = symbols.size();
@@ -71,23 +80,15 @@ void filter(vector<complex<double>>& symbols_ups, const vector<complex<double>>&
 }
 
 void filter_int16_t(vector<int16_t>& symbols_ups, const vector<int16_t>& impulse, vector<int16_t>& output) {
-    size_t n = symbols_ups.size();
+    size_t n = symbols_ups.size() / 2;
     size_t L = impulse.size();
     fill(output.begin(), output.end(), 0);
     for (size_t i = 0; i < n; i++) {
         size_t max_j = min(L, i + 1);
         for (size_t j = 0; j < max_j; j++) {
-            output[i] += impulse[j] * symbols_ups[i - j];
+            output[i * 2] += impulse[j] * symbols_ups[(i - j) * 2];
+            output[i * 2 + 1] += impulse[j] * symbols_ups[(i - j) * 2 + 1];
         }
-    }
-}
-
-int bits_per_symbol(ModulationType type) {
-    switch(type) {
-        case ModulationType::BPSK: return 1;
-        case ModulationType::QPSK: return 2;
-        case ModulationType::QAM16: return 4;
-        default: throw std::invalid_argument("Unsapported modulation type");
     }
 }
 
