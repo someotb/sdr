@@ -43,6 +43,7 @@ struct sharedData
     vector<double> argument;
     vector<double> frequency_axis;
     bool send = false;
+    bool symb_sync = false;
     bool quit = false;
     bool changed_rx_gain = false;
     bool changed_tx_gain = false;
@@ -77,7 +78,7 @@ struct sharedData
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
 
-    ModulationType modulation = ModulationType::QPSK;
+    ModulationType modulation = ModulationType::QAM16;
     int bits_size = bits_per_symbol(modulation);
     size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
 
@@ -208,15 +209,16 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             sh_data->imag_p_aft_con[i] = rx_buffer_after_conv[i * 2 + 1];
         }
 
-        symbols_sync(rx_buffer_after_conv, sh_data->offset, sh_data->BnTs);
+        if (sh_data->symb_sync) {
+            symbols_sync(rx_buffer_after_conv, sh_data->offset, sh_data->BnTs);
+            for (size_t i = 0; i + 10 < rx_buffer_after_conv.size() / 2; i += 10) {
+                size_t k = i + sh_data->offset[i / 10];
 
-        for (size_t i = 0; i + 10 < rx_buffer_after_conv.size() / 2; i += 10) {
-            size_t k = i + sh_data->offset[i / 10];
+                if (k >= rx_buffer_after_conv.size() / 2) break;
 
-            if (k >= rx_buffer_after_conv.size() / 2) break;
-
-            sh_data->real_p_aft_con_offset[i / 10] = rx_buffer_after_conv[2 * k];
-            sh_data->imag_p_aft_con_offset[i / 10] = rx_buffer_after_conv[2 * k + 1];
+                sh_data->real_p_aft_con_offset[i / 10] = rx_buffer_after_conv[2 * k];
+                sh_data->imag_p_aft_con_offset[i / 10] = rx_buffer_after_conv[2 * k + 1];
+            }
         }
     }
     cout << "[TX] " << "Transmission complited\n";
@@ -330,8 +332,8 @@ void run_gui(sharedData *sh_data) {
 
         ImGui::Begin("Settings");
         if (ImGui::BeginTabBar("Control Panel")) {
-            if (ImGui::BeginTabItem("TX CONFIG")) {
-                if (ImGui::TreeNodeEx("Transmission")) {
+            if (ImGui::BeginTabItem("CONFIG")) {
+                if (ImGui::TreeNodeEx("SDR CONFIG")) {
                     ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
                     if (ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 0.f, 73.f)){
                         sh_data->changed_rx_gain = true;
@@ -356,9 +358,15 @@ void run_gui(sharedData *sh_data) {
                         sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];
                         sh_data->changed_tx_bandwidth = true;
                     }
+                    ImGui::TreePop();
+                }
+
+                if (ImGui::TreeNodeEx("Symbolic synchronization")) {
+                    ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
                     ImGui::InputDouble("BnTs VALUE", &sh_data->BnTs, 1e-7);
                     ImGui::TreePop();
                 }
+
                 ImGui::EndTabItem();
             }
 
