@@ -34,8 +34,8 @@ struct sharedData
 {
     vector<int16_t> real_p_aft_con;
     vector<int16_t> imag_p_aft_con;
-    vector<double> real_p_aft_con_offset;
-    vector<double> imag_p_aft_con_offset;
+    vector<double> real_p_aft_gar;
+    vector<double> imag_p_aft_gar;
     vector<int16_t> real_p;
     vector<int16_t> imag_p;
     vector<int> offset;
@@ -63,8 +63,8 @@ struct sharedData
     double Kp = 1.0;
 
     sharedData(size_t rx_mtu) {
-        real_p_aft_con_offset.resize(rx_mtu / 10, 0);
-        imag_p_aft_con_offset.resize(rx_mtu / 10, 0);
+        real_p_aft_gar.resize(rx_mtu / 10, 0);
+        imag_p_aft_gar.resize(rx_mtu / 10, 0);
         real_p_aft_con.resize(rx_mtu, 0);
         imag_p_aft_con.resize(rx_mtu, 0);
         offset.resize(rx_mtu / 10, 0);
@@ -219,8 +219,8 @@ void run_backend(sharedData *sh_data, char *argv[]) {
 
                 if (k >= rx_buf_double.size() / 2) break;
 
-                sh_data->real_p_aft_con_offset[i / 10] = rx_buf_double[2 * k];
-                sh_data->imag_p_aft_con_offset[i / 10] = rx_buf_double[2 * k + 1];
+                sh_data->real_p_aft_gar[i / 10] = rx_buf_double[2 * k];
+                sh_data->imag_p_aft_gar[i / 10] = rx_buf_double[2 * k + 1];
             }
         }
     }
@@ -241,10 +241,11 @@ void run_gui(sharedData *sh_data) {
         "Backend start", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+    SDL_GL_SetSwapInterval(0); 
 
     ImGui::CreateContext();
     ImPlot::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -281,9 +282,9 @@ void run_gui(sharedData *sh_data) {
             }
         ImGui::End();
 
-        ImGui::Begin("Constellation Diagram After Convolve and Offset");
-            if (ImPlot::BeginPlot("Constellation Diagram After Convolve and Offset")) {
-                ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_con_offset.data(), sh_data->imag_p_aft_con_offset.data(), sh_data->imag_p_aft_con_offset.size());
+        ImGui::Begin("Constellation Diagram After Gardner");
+            if (ImPlot::BeginPlot("Constellation Diagram After Gardner")) {
+                ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_gar.data(), sh_data->imag_p_aft_gar.data(), sh_data->imag_p_aft_gar.size());
                 ImPlot::EndPlot();
             }
         ImGui::End();
@@ -298,8 +299,8 @@ void run_gui(sharedData *sh_data) {
 
         ImGui::Begin("I/Q samples After Convolve and Offset");
             if (ImPlot::BeginPlot("I/Q samples After Convolve and Offset")) {
-                ImPlot::PlotLine("I", sh_data->real_p_aft_con_offset.data(), sh_data->real_p_aft_con_offset.size());
-                ImPlot::PlotLine("Q", sh_data->imag_p_aft_con_offset.data(), sh_data->imag_p_aft_con_offset.size());
+                ImPlot::PlotLine("I", sh_data->real_p_aft_gar.data(), sh_data->real_p_aft_gar.size());
+                ImPlot::PlotLine("Q", sh_data->imag_p_aft_gar.data(), sh_data->imag_p_aft_gar.size());
                 ImPlot::EndPlot();
             }
         ImGui::End();
@@ -334,6 +335,7 @@ void run_gui(sharedData *sh_data) {
         ImGui::End();
 
         ImGui::Begin("Settings");
+        ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
         if (ImGui::BeginTabBar("Control Panel")) {
             if (ImGui::BeginTabItem("Config")) {
                 if (ImGui::TreeNodeEx("SDR Config")) {
