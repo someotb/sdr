@@ -18,8 +18,8 @@ public:
     double tx_gain = 80.0;
     double bandwidth = 1e6;
 
-    vector<int16_t> rx_buffer;
-    vector<int16_t> tx_buffer;
+    std::vector<int16_t> rx_buffer;
+    std::vector<int16_t> tx_buffer;
 
     SDRDevice(char* usb): sdr(nullptr), rxStream(nullptr), txStream(nullptr) {
         SoapySDRKwargs args = {};

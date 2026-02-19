@@ -1,6 +1,7 @@
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Types.h>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <stdio.h>
@@ -18,6 +19,7 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <iterator>
 #include "imgui.h"
 #include "implot.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -25,23 +27,23 @@
 #include "modulation.hpp"
 #include "sdr.hpp"
 
-constexpr int UPSAMPLE = 10;
-constexpr size_t N_BUFFERS = 1000000;
 constexpr long long TIMEOUT = 400000;
 constexpr long long TX_DELAY = 4000000;
 
 struct sharedData
 {
-    vector<int16_t> real_p_aft_con;
-    vector<int16_t> imag_p_aft_con;
-    vector<double> real_p_aft_gar;
-    vector<double> imag_p_aft_gar;
-    vector<int16_t> real_p;
-    vector<int16_t> imag_p;
-    vector<int> offset;
-    vector<double> shifted_magnitude;
-    vector<double> argument;
-    vector<double> frequency_axis;
+    ModulationType modul_type = ModulationType::QPSK;
+    int upsample_koef = 10;
+    std::vector<int16_t> real_p_aft_con;
+    std::vector<int16_t> imag_p_aft_con;
+    std::vector<double> real_p_aft_gar;
+    std::vector<double> imag_p_aft_gar;
+    std::vector<int16_t> real_p;
+    std::vector<int16_t> imag_p;
+    std::vector<int> offset;
+    std::vector<double> shifted_magnitude;
+    std::vector<double> argument;
+    std::vector<double> frequency_axis;
     bool send = false;
     bool symb_sync = false;
     bool quit = false;
@@ -52,6 +54,8 @@ struct sharedData
     bool changed_sample_rate = false;
     bool changed_rx_bandwidth = false;
     bool changed_tx_bandwidth = false;
+    bool changed_modulation_type = false;
+    bool cont_time = true;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
     double rx_frequency = 826e6;
@@ -79,18 +83,6 @@ struct sharedData
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
 
-    ModulationType modulation = ModulationType::QAM16;
-    int bits_size = bits_per_symbol(modulation);
-    size_t max_symbols = sdr.tx_mtu / UPSAMPLE;
-
-    vector<int16_t> bits(max_symbols * bits_size);
-    vector<int16_t> impulse_int16_t(UPSAMPLE, 1);
-    vector<int16_t> rx_buffer_after_conv(sdr.rx_buffer.size(), 0);
-    vector<complex<double>> symbols(bits.size() / bits_size);
-    vector<complex<double>> impulse(UPSAMPLE, 1.0);
-    vector<complex<double>> symbols_ups(sdr.tx_mtu * UPSAMPLE);
-    vector<double> magnitude(sdr.rx_mtu, 0);
-
     fftw_complex* in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
     fftw_complex* out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
     fftw_plan plan = fftw_plan_dft_1d(sdr.rx_mtu, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
@@ -99,71 +91,106 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         sh_data->frequency_axis[i] = (i - sdr.rx_mtu / 2.0) * sh_data->sample_rate / sdr.rx_mtu;
     }
 
-    for (size_t i = 0; i < bits.size(); i++) bits[i] = rand() % 2;
+    std::vector<int16_t> bits;
+    std::vector<std::complex<double>> symbols;
+    std::vector<std::complex<double>> symbols_ups;
+    std::vector<std::complex<double>> impulse;
+    std::vector<int16_t> impulse_int16_t;
+    std::vector<int16_t> rx_buffer_after_conv(sdr.rx_buffer.size(), 0);
+    std::vector<double> rx_buf_double_after_conv(sdr.rx_buffer.size(), 0);
+    std::vector<double> magnitude(sdr.rx_mtu, 0);
 
-    modulate(bits, symbols, modulation);
-    UpSampler(symbols, symbols_ups, UPSAMPLE);
-    filter(symbols_ups, impulse);
+    while (sh_data->quit == false) {
+        if (!sh_data->cont_time) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
 
-    for (size_t i = 0; i < sdr.tx_mtu; i++) {
-        sdr.tx_buffer[2*i] = (real(symbols_ups[i]) * 16000);
-        sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
-    }
+        int bits_size = bits_per_symbol(sh_data->modul_type);
+        size_t max_symbols = sdr.tx_mtu / sh_data->upsample_koef;
 
-    for (size_t i = 0; i < N_BUFFERS; ++i) {
+        size_t required_bits = max_symbols * bits_size;
+        size_t required_symbols = max_symbols;
+        size_t required_ups = sdr.tx_mtu * sh_data->upsample_koef;
+        size_t required_impulse = sh_data->upsample_koef;
+
+        if (bits.size() != required_bits)
+            bits.resize(required_bits);
+
+        if (symbols.size() != required_symbols)
+            symbols.resize(required_symbols);
+
+        if (symbols_ups.size() != required_ups)
+            symbols_ups.resize(required_ups);
+
+        if (impulse.size() != required_impulse)
+            impulse.assign(required_impulse, 1.0);
+
+        if (impulse_int16_t.size() != required_impulse)
+            impulse_int16_t.assign(required_impulse, 1);
+
+        for (size_t i = 0; i < bits.size(); i++) bits[i] = rand() % 2;
+
+        modulate(bits, symbols, sh_data->modul_type);
+        UpSampler(symbols, symbols_ups, sh_data->upsample_koef);
+        filter(symbols_ups, impulse);
+
+        for (size_t i = 0; i < sdr.tx_mtu; i++) {
+            sdr.tx_buffer[2*i] = (real(symbols_ups[i]) * 16000);
+            sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
+        }
+
         if (sh_data->changed_rx_gain) {
             if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_gain))) != 0) {
-                cout << "[ERROR] SET RX GAIN | ERR CODE: " << err << "\n";
+                std::cout << "[ERROR] SET RX GAIN | ERR CODE: " << err << "\n";
             }
             sh_data->changed_rx_gain = false;
         }
 
         if (sh_data->changed_tx_gain) {
             if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_gain))) != 0) {
-                cout << "[ERROR] SET TX GAIN | ERR CODE: " << err << "\n";
+                std::cout << "[ERROR] SET TX GAIN | ERR CODE: " << err << "\n";
             }
             sh_data->changed_tx_gain = false;
         }
 
         if (sh_data->changed_rx_freq) {
             if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_RX, 0, sh_data->rx_frequency, NULL)) != 0) {
-                cout << "[ERROR] SET RX FREQ | ERR CODE: " << err << "\n";
+                std::cout << "[ERROR] SET RX FREQ | ERR CODE: " << err << "\n";
             }
             sh_data->changed_rx_freq = false;
         }
 
         if (sh_data->changed_tx_freq) {
             if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_TX, 0, sh_data->tx_frequency, NULL)) != 0) {
-                cout << "[ERROR] SET TX FREQ | ERR CODE: " << err << "\n";
+                std::cout << "[ERROR] SET TX FREQ | ERR CODE: " << err << "\n";
             }
             sh_data->changed_tx_freq = false;
         }
 
         if (sh_data->changed_sample_rate) {
             if (int err; (err = SoapySDRDevice_setSampleRate(sdr.sdr, SOAPY_SDR_RX, 0, sh_data->sample_rate)) != 0) {
-                cout << "[ERROR] SET RX SAMPLE RATE | ERR CODE: " << err << "\n";
+                std::cout << "[ERROR] SET RX SAMPLE RATE | ERR CODE: " << err << "\n";
             }
             if (int err; (err = SoapySDRDevice_setSampleRate(sdr.sdr, SOAPY_SDR_TX, 0, sh_data->sample_rate)) != 0) {
-                cout << "[ERROR] SET TX SAMPLE RATE | ERR CODE: " << err << "\n";
+                std::cout << "[ERROR] SET TX SAMPLE RATE | ERR CODE: " << err << "\n";
             }
             sh_data->changed_sample_rate = false;
         }
 
         if (sh_data->changed_rx_bandwidth) {
             if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_bandwidth))) != 0) {
-                cout << "[ERROR] SET RX BANDWIDTH | ERR CODE: " << err << "\n";
+                std::cout << "[ERROR] SET RX BANDWIDTH | ERR CODE: " << err << "\n";
             }
             sh_data->changed_rx_bandwidth = false;
         }
 
         if (sh_data->changed_tx_bandwidth) {
             if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_bandwidth))) != 0) {
-                cout << "[ERROR] SET TX BANDWIDTH | ERR CODE: " << err << "\n";
+                std::cout << "[ERROR] SET TX BANDWIDTH | ERR CODE: " << err << "\n";
             }
             sh_data->changed_tx_bandwidth = false;
         }
-
-        if (sh_data->quit) break;
 
         void *rx_buffs[] = {sdr.rx_buffer.data()};
         const void *tx_buffs[] = {sdr.tx_buffer.data()};
@@ -211,27 +238,27 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         }
 
         if (sh_data->symb_sync) {
-            vector<double> rx_buf_double(rx_buffer_after_conv.begin(), rx_buffer_after_conv.end());
-            norm(rx_buf_double);
-            symbols_sync(rx_buf_double, sh_data->offset, sh_data->BnTs, sh_data->Kp);
-            for (size_t i = 0; i + 10 < rx_buf_double.size() / 2; i += 10) {
+            std::transform(rx_buffer_after_conv.begin(), rx_buffer_after_conv.end(), rx_buf_double_after_conv.begin(), [](int16_t v) { return static_cast<double>(v); });
+            norm(rx_buf_double_after_conv);
+            symbols_sync(rx_buf_double_after_conv, sh_data->offset, sh_data->BnTs, sh_data->Kp, sh_data->upsample_koef);
+            for (size_t i = 0; i + 10 < rx_buf_double_after_conv.size() / 2; i += 10) {
                 size_t k = i + sh_data->offset[i / 10];
 
-                if (k >= rx_buf_double.size() / 2) break;
+                if (k >= rx_buf_double_after_conv.size() / 2) break;
 
-                sh_data->real_p_aft_gar[i / 10] = rx_buf_double[2 * k];
-                sh_data->imag_p_aft_gar[i / 10] = rx_buf_double[2 * k + 1];
+                sh_data->real_p_aft_gar[i / 10] = rx_buf_double_after_conv[2 * k];
+                sh_data->imag_p_aft_gar[i / 10] = rx_buf_double_after_conv[2 * k + 1];
             }
         }
     }
-    cout << "[TX] " << "Transmission complited\n";
+    std::cout << "[TX] " << "Transmission complited\n";
     fftw_destroy_plan(plan);
     fftw_free(in);
     fftw_free(out);
 }
 
 void run_gui(sharedData *sh_data) {
-    vector<float> bandwidths = {2e5f, 1e6f, 2e6f, 3e6f, 4e6f, 5e6f, 6e6f, 7e6f, 8e6f, 9e6f, 10e6f};
+    std::vector<float> bandwidths = {2e5f, 1e6f, 2e6f, 3e6f, 4e6f, 5e6f, 6e6f, 7e6f, 8e6f, 9e6f, 10e6f};
     int cur_rx_bandwidth = 1;
     int cur_tx_bandwidth = 1;
 
@@ -332,7 +359,7 @@ void run_gui(sharedData *sh_data) {
                 }
             ImGui::EndChild();
         ImGui::End();
-        
+
         ImGui::Begin("Modulation Workspace", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
                 if (ImPlot::BeginPlot("Magnitude")) {
@@ -360,36 +387,60 @@ void run_gui(sharedData *sh_data) {
         ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
         if (ImGui::BeginTabBar("Control Panel")) {
             if (ImGui::BeginTabItem("Config")) {
+                ImGui::SeparatorText("Pre Modulation");
+                const char* current_label = nullptr;
+                switch (sh_data->modul_type) {
+                    case ModulationType::BPSK: current_label = "BPSK"; break;
+                    case ModulationType::QPSK: current_label = "QPSK"; break;
+                    case ModulationType::QAM16: current_label = "QAM16"; break;
+                }
+
+                if (ImGui::BeginCombo("Modulation Type", current_label)) {
+                    if (ImGui::Selectable("BPSK", sh_data->modul_type == ModulationType::BPSK)) sh_data->modul_type = ModulationType::BPSK;
+                    if (ImGui::Selectable("QPSK", sh_data->modul_type == ModulationType::QPSK)) sh_data->modul_type = ModulationType::QPSK;
+                    if (ImGui::Selectable("QAM16", sh_data->modul_type == ModulationType::QAM16)) sh_data->modul_type = ModulationType::QAM16;
+                    ImGui::EndCombo();
+                }
+                if (ImGui::InputInt("Upsample Coefficient", &sh_data->upsample_koef, 1, 1e1))
+
                 ImGui::SeparatorText("SDR Configuration");
                 ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
-                if (ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 0.f, 73.f)){
+                if (ImGui::DragFloat("RX Gain", &sh_data->rx_gain, 0.25f, 0.f, 73.f)){
                     sh_data->changed_rx_gain = true;
                 }
-                if (ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f)) {
+                if (ImGui::DragFloat("TX Gain", &sh_data->tx_gain, 0.25f, 0.f, 89.f)) {
                     sh_data->changed_tx_gain = true;
                 }
-                if (ImGui::InputDouble("RX FREQUENCY", &sh_data->rx_frequency, 1e2)) {
+                if (ImGui::InputDouble("RX Frequency", &sh_data->rx_frequency, 1e2)) {
                     sh_data->changed_rx_freq = true;
                 }
-                if (ImGui::InputDouble("TX FREQUENCY", &sh_data->tx_frequency, 1e2)) {
+                if (ImGui::InputDouble("TX Frequency", &sh_data->tx_frequency, 1e2)) {
                     sh_data->changed_tx_freq = true;
                 }
-                if (ImGui::InputDouble("SAMPLE RATE", &sh_data->sample_rate, 1e5)) {
+                if (ImGui::InputDouble("Sample Rate", &sh_data->sample_rate, 1e5)) {
                     sh_data->changed_sample_rate = true;
                 }
-                if (ImGui::SliderInt("RX BANDWIDTH", &cur_rx_bandwidth, 0, bandwidths.size() - 1, to_string(bandwidths[cur_rx_bandwidth]).c_str())) {
+                if (ImGui::SliderInt("RX Bandwidth", &cur_rx_bandwidth, 0, bandwidths.size() - 1, std::to_string(bandwidths[cur_rx_bandwidth]).c_str())) {
                     sh_data->rx_bandwidth = bandwidths[cur_rx_bandwidth];
                     sh_data->changed_rx_bandwidth = true;
                 }
-                if (ImGui::SliderInt("TX BANDWIDTH", &cur_tx_bandwidth, 0, bandwidths.size() - 1, to_string(bandwidths[cur_tx_bandwidth]).c_str())) {
+                if (ImGui::SliderInt("TX Bandwidth", &cur_tx_bandwidth, 0, bandwidths.size() - 1, std::to_string(bandwidths[cur_tx_bandwidth]).c_str())) {
                     sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];
                     sh_data->changed_tx_bandwidth = true;
                 }
 
                 ImGui::SeparatorText("Gardner Configuration");
                 ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
-                ImGui::InputDouble("BnTs VALUE", &sh_data->BnTs, 1, 1e1);
-                ImGui::InputDouble("Kp VALUE", &sh_data->Kp, 1, 1e1);
+                ImGui::InputDouble("BnTs Value", &sh_data->BnTs, 1, 1e1);
+                ImGui::InputDouble("Kp Value", &sh_data->Kp, 1, 1e1);
+
+                ImGui::SeparatorText("Time Control");
+                const char* label = sh_data->cont_time ? "Running" : "Stopped";
+
+                if (ImGui::Button(label)) {
+                    sh_data->cont_time = !sh_data->cont_time;
+                }
+
                 ImGui::EndTabItem();
             }
 
