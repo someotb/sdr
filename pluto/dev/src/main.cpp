@@ -401,7 +401,7 @@ void run_gui(sharedData *sh_data) {
                     if (ImGui::Selectable("QAM16", sh_data->modul_type == ModulationType::QAM16)) sh_data->modul_type = ModulationType::QAM16;
                     ImGui::EndCombo();
                 }
-                if (ImGui::InputInt("Upsample Coefficient", &sh_data->upsample_koef, 1, 1e1))
+                ImGui::InputInt("Upsample Coefficient", &sh_data->upsample_koef, 1, 1e1);
 
                 ImGui::SeparatorText("SDR Configuration");
                 ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
