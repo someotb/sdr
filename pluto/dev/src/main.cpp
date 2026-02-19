@@ -241,11 +241,25 @@ void run_gui(sharedData *sh_data) {
         "Backend start", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    SDL_GL_SetSwapInterval(0); 
+    SDL_GL_SetSwapInterval(0);
 
     ImGui::CreateContext();
     ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 10.f;
+    style.FrameRounding = 8.f;
+    style.ChildRounding = 8.f;
+    style.ScrollbarRounding = 10.f;
+    style.TabRounding = 8.f;
+    style.WindowBorderSize = 0.0f;
+    style.FrameBorderSize = 0.0f;
+    style.PopupBorderSize = 0.0f;
+    style.WindowPadding = ImVec2(10, 10);
+    style.FramePadding = ImVec2(4, 4);
+    style.ItemSpacing = ImVec2(8, 8);
+    style.ItemInnerSpacing = ImVec2(4, 4);
+
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -268,121 +282,125 @@ void run_gui(sharedData *sh_data) {
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
 
-        ImGui::Begin("Constellation Diagram");
-            if (ImPlot::BeginPlot("Constellation Diagram")) {
-                ImPlot::PlotScatter("I/Q", sh_data->real_p.data(), sh_data->imag_p.data(), sh_data->imag_p.size());
+        ImGui::Begin("Signal Workspace", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            ImVec2 size = ImGui::GetContentRegionAvail();
+            float quoter_w = size.x * 0.25f;
+            float quoter_h = size.y * 0.33f;
+            float tr_quoter_w = size.x * 0.75f;
+            ImGui::BeginChild("Constellation Diagram", ImVec2(quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("Constellation Diagram")) {
+                    ImPlot::PlotScatter("I/Q", sh_data->real_p.data(), sh_data->imag_p.data(), sh_data->imag_p.size());
+                    ImPlot::EndPlot();
+                }
+            ImGui::EndChild();
+            ImGui::SameLine();
+            ImGui::BeginChild("I/Q samples", ImVec2(tr_quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("I/Q samples")) {
+                    ImPlot::PlotLine("I", sh_data->real_p.data(), sh_data->real_p.size());
+                    ImPlot::PlotLine("Q", sh_data->imag_p.data(), sh_data->imag_p.size());
+                    ImPlot::EndPlot();
+                }
+            ImGui::EndChild();
+
+            ImGui::BeginChild("Constellation Diagram After Convolve", ImVec2(quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("Constellation Diagram After Convolve")) {
+                    ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_con.data(), sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
+                    ImPlot::EndPlot();
+                }
+            ImGui::EndChild();
+            ImGui::SameLine();
+            ImGui::BeginChild("I/Q samples After Convolve", ImVec2(tr_quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("I/Q samples After Convolve")) {
+                    ImPlot::PlotLine("I", sh_data->real_p_aft_con.data(), sh_data->real_p_aft_con.size());
+                    ImPlot::PlotLine("Q", sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
+                    ImPlot::EndPlot();
+                }
+            ImGui::EndChild();
+
+            ImGui::BeginChild("Constellation Diagram After Gardner", ImVec2(quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("Constellation Diagram After Gardner")) {
+                    ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_gar.data(), sh_data->imag_p_aft_gar.data(), sh_data->imag_p_aft_gar.size());
+                    ImPlot::EndPlot();
+                }
+            ImGui::EndChild();
+            ImGui::SameLine();
+            ImGui::BeginChild("I/Q samples After Gardner", ImVec2(tr_quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("I/Q samples After Gardner")) {
+                    ImPlot::PlotLine("I", sh_data->real_p_aft_gar.data(), sh_data->real_p_aft_gar.size());
+                    ImPlot::PlotLine("Q", sh_data->imag_p_aft_gar.data(), sh_data->imag_p_aft_gar.size());
+                    ImPlot::EndPlot();
+                }
+            ImGui::EndChild();
+        ImGui::End();
+        
+
+        ImGui::Begin("Modulation Workspace", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
+                if (ImPlot::BeginPlot("Magnitude")) {
+                    ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
+                    ImPlot::EndPlot();
+                }
+            ImGui::EndChild();
+
+            ImGui::BeginChild("Argument", ImVec2(size.x, quoter_h), true);
+                if (ImPlot::BeginPlot("Argument")) {
+                    ImPlot::PlotLine("Argument", sh_data->frequency_axis.data(), sh_data->argument.data(), sh_data->argument.size());
+                    ImPlot::EndPlot();
+                }
+            ImGui::EndChild();
+
+            ImGui::BeginChild("Gardner Offset", ImVec2(size.x, quoter_h), true);
+            if (ImPlot::BeginPlot("Gardner Offset")) {
+                ImPlot::PlotLine("Gardner Offset", sh_data->offset.data(), sh_data->offset.size());
                 ImPlot::EndPlot();
             }
-        ImGui::End();
-
-        ImGui::Begin("Constellation Diagram After Convolve");
-            if (ImPlot::BeginPlot("Constellation Diagram After Convolve")) {
-                ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_con.data(), sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
-                ImPlot::EndPlot();
-            }
-        ImGui::End();
-
-        ImGui::Begin("Constellation Diagram After Gardner");
-            if (ImPlot::BeginPlot("Constellation Diagram After Gardner")) {
-                ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_gar.data(), sh_data->imag_p_aft_gar.data(), sh_data->imag_p_aft_gar.size());
-                ImPlot::EndPlot();
-            }
-        ImGui::End();
-
-        ImGui::Begin("I/Q samples");
-            if (ImPlot::BeginPlot("I/Q samples")) {
-                ImPlot::PlotLine("I", sh_data->real_p.data(), sh_data->real_p.size());
-                ImPlot::PlotLine("Q", sh_data->imag_p.data(), sh_data->imag_p.size());
-                ImPlot::EndPlot();
-            }
-        ImGui::End();
-
-        ImGui::Begin("I/Q samples After Convolve and Offset");
-            if (ImPlot::BeginPlot("I/Q samples After Convolve and Offset")) {
-                ImPlot::PlotLine("I", sh_data->real_p_aft_gar.data(), sh_data->real_p_aft_gar.size());
-                ImPlot::PlotLine("Q", sh_data->imag_p_aft_gar.data(), sh_data->imag_p_aft_gar.size());
-                ImPlot::EndPlot();
-            }
-        ImGui::End();
-
-        ImGui::Begin("I/Q samples After Convolve");
-            if (ImPlot::BeginPlot("I/Q samples After Convolve")) {
-                ImPlot::PlotLine("I", sh_data->real_p_aft_con.data(), sh_data->real_p_aft_con.size());
-                ImPlot::PlotLine("Q", sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
-                ImPlot::EndPlot();
-            }
-        ImGui::End();
-
-        ImGui::Begin("Magnitude");
-            if (ImPlot::BeginPlot("Magnitude")) {
-                ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
-                ImPlot::EndPlot();
-            }
-        ImGui::End();
-
-        ImGui::Begin("Argument");
-            if (ImPlot::BeginPlot("Argument")) {
-                ImPlot::PlotLine("Argument", sh_data->frequency_axis.data(), sh_data->argument.data(), sh_data->argument.size());
-                ImPlot::EndPlot();
-            }
-        ImGui::End();
-
-        ImGui::Begin("Offset");
-        if (ImPlot::BeginPlot("Offset")) {
-            ImPlot::PlotLine("Offset", sh_data->offset.data(), sh_data->offset.size());
-            ImPlot::EndPlot();
-        }
+            ImGui::EndChild();
         ImGui::End();
 
         ImGui::Begin("Settings");
         ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
         if (ImGui::BeginTabBar("Control Panel")) {
             if (ImGui::BeginTabItem("Config")) {
-                if (ImGui::TreeNodeEx("SDR Config")) {
-                    ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
-                    if (ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 0.f, 73.f)){
-                        sh_data->changed_rx_gain = true;
-                    }
-                    if (ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f)) {
-                        sh_data->changed_tx_gain = true;
-                    }
-                    if (ImGui::InputDouble("RX FREQUENCY", &sh_data->rx_frequency, 1e2)) {
-                        sh_data->changed_rx_freq = true;
-                    }
-                    if (ImGui::InputDouble("TX FREQUENCY", &sh_data->tx_frequency, 1e2)) {
-                        sh_data->changed_tx_freq = true;
-                    }
-                    if (ImGui::InputDouble("SAMPLE RATE", &sh_data->sample_rate, 1e5)) {
-                        sh_data->changed_sample_rate = true;
-                    }
-                    if (ImGui::SliderInt("RX BANDWIDTH", &cur_rx_bandwidth, 0, bandwidths.size() - 1, to_string(bandwidths[cur_rx_bandwidth]).c_str())) {
-                        sh_data->rx_bandwidth = bandwidths[cur_rx_bandwidth];
-                        sh_data->changed_rx_bandwidth = true;
-                    }
-                    if (ImGui::SliderInt("TX BANDWIDTH", &cur_tx_bandwidth, 0, bandwidths.size() - 1, to_string(bandwidths[cur_tx_bandwidth]).c_str())) {
-                        sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];
-                        sh_data->changed_tx_bandwidth = true;
-                    }
-                    ImGui::TreePop();
+                ImGui::SeparatorText("SDR Configuration");
+                ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
+                if (ImGui::DragFloat("RX GAIN", &sh_data->rx_gain, 0.25f, 0.f, 73.f)){
+                    sh_data->changed_rx_gain = true;
+                }
+                if (ImGui::DragFloat("TX GAIN", &sh_data->tx_gain, 0.25f, 0.f, 89.f)) {
+                    sh_data->changed_tx_gain = true;
+                }
+                if (ImGui::InputDouble("RX FREQUENCY", &sh_data->rx_frequency, 1e2)) {
+                    sh_data->changed_rx_freq = true;
+                }
+                if (ImGui::InputDouble("TX FREQUENCY", &sh_data->tx_frequency, 1e2)) {
+                    sh_data->changed_tx_freq = true;
+                }
+                if (ImGui::InputDouble("SAMPLE RATE", &sh_data->sample_rate, 1e5)) {
+                    sh_data->changed_sample_rate = true;
+                }
+                if (ImGui::SliderInt("RX BANDWIDTH", &cur_rx_bandwidth, 0, bandwidths.size() - 1, to_string(bandwidths[cur_rx_bandwidth]).c_str())) {
+                    sh_data->rx_bandwidth = bandwidths[cur_rx_bandwidth];
+                    sh_data->changed_rx_bandwidth = true;
+                }
+                if (ImGui::SliderInt("TX BANDWIDTH", &cur_tx_bandwidth, 0, bandwidths.size() - 1, to_string(bandwidths[cur_tx_bandwidth]).c_str())) {
+                    sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];
+                    sh_data->changed_tx_bandwidth = true;
                 }
 
-                if (ImGui::TreeNodeEx("Symbolic synchronization")) {
-                    ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
-                    ImGui::InputDouble("BnTs VALUE", &sh_data->BnTs, 1, 1e1);
-                    ImGui::InputDouble("Kp VALUE", &sh_data->Kp, 1, 1e1);
-                    ImGui::TreePop();
-                }
-
+                ImGui::SeparatorText("Gardner Configuration");
+                ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
+                ImGui::InputDouble("BnTs VALUE", &sh_data->BnTs, 1, 1e1);
+                ImGui::InputDouble("Kp VALUE", &sh_data->Kp, 1, 1e1);
                 ImGui::EndTabItem();
             }
 
             if (ImGui::BeginTabItem("View")) {
-                if (ImGui::TreeNodeEx("Theme Color")) {
-                    if (ImGui::Button("Light")) ImGui::StyleColorsLight();
-                    if (ImGui::Button("Dark")) ImGui::StyleColorsDark();
-                    if (ImGui::Button("Classic")) ImGui::StyleColorsClassic();
-                    ImGui::TreePop();
-                }
+                ImGui::SeparatorText("Theme Colors");
+                if (ImGui::Button("Light Theme")) ImGui::StyleColorsLight();
+                ImGui::SameLine();
+                if (ImGui::Button("Dark Theme")) ImGui::StyleColorsDark();
+                ImGui::SameLine();
+                if (ImGui::Button("Classic Theme")) ImGui::StyleColorsClassic();
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
