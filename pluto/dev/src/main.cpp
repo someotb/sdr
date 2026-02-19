@@ -333,7 +333,6 @@ void run_gui(sharedData *sh_data) {
             ImGui::EndChild();
         ImGui::End();
         
-
         ImGui::Begin("Modulation Workspace", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
                 if (ImPlot::BeginPlot("Magnitude")) {
@@ -413,7 +412,6 @@ void run_gui(sharedData *sh_data) {
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
         SDL_GL_SwapWindow(window);
     }
     sh_data->quit = true;
