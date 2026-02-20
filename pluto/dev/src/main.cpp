@@ -32,12 +32,15 @@ constexpr long long TX_DELAY = 4000000;
 
 struct sharedData
 {
-    ModulationType modul_type = ModulationType::QPSK;
+    ModulationType modul_type_TX = ModulationType::QPSK;
+    ModulationType modul_type_RX = ModulationType::QPSK;
     int upsample_koef = 10;
-    std::vector<int16_t> real_p_aft_con;
-    std::vector<int16_t> imag_p_aft_con;
+    std::vector<double> real_p_aft_con;
+    std::vector<double> imag_p_aft_con;
     std::vector<double> real_p_aft_gar;
     std::vector<double> imag_p_aft_gar;
+    std::vector<double> real_p_aft_cost;
+    std::vector<double> imag_p_aft_cost;
     std::vector<int16_t> real_p;
     std::vector<int16_t> imag_p;
     std::vector<int> offset;
@@ -46,6 +49,7 @@ struct sharedData
     std::vector<double> frequency_axis;
     bool send = false;
     bool symb_sync = false;
+    bool freq_sync = false;
     bool quit = false;
     bool changed_rx_gain = false;
     bool changed_tx_gain = false;
@@ -55,7 +59,9 @@ struct sharedData
     bool changed_rx_bandwidth = false;
     bool changed_tx_bandwidth = false;
     bool changed_modulation_type = false;
+    bool reset_costas_state = false;
     bool cont_time = true;
+    bool costas_loop_mode = false;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
     double rx_frequency = 826e6;
@@ -63,10 +69,16 @@ struct sharedData
     double sample_rate = 1e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
-    double BnTs = 0.0;
-    double Kp = 1.0;
+    double gardner_BnTs = 0.0;
+    double gardner_Kp = 1.0;
+    double costas_Kp = 0.05;
+    double costas_Ki = 0.001;
+    double costas_phase = 0;
+    double costas_freq = 0;
 
     sharedData(size_t rx_mtu) {
+        imag_p_aft_cost.resize(rx_mtu, 0);
+        real_p_aft_cost.resize(rx_mtu, 0);
         real_p_aft_gar.resize(rx_mtu / 10, 0);
         imag_p_aft_gar.resize(rx_mtu / 10, 0);
         real_p_aft_con.resize(rx_mtu, 0);
@@ -82,6 +94,7 @@ struct sharedData
 
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
+    CostasState costas;
 
     fftw_complex* in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
     fftw_complex* out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
@@ -95,18 +108,19 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     std::vector<std::complex<double>> symbols;
     std::vector<std::complex<double>> symbols_ups;
     std::vector<std::complex<double>> impulse;
-    std::vector<int16_t> impulse_int16_t;
-    std::vector<int16_t> rx_buffer_after_conv(sdr.rx_buffer.size(), 0);
+    std::vector<double> impulse_double;
+    std::vector<double> rx_buffer_double(sdr.rx_buffer.size(), 0);
+    std::vector<double> rx_buffer_after_conv(sdr.rx_buffer.size(), 0);
     std::vector<double> rx_buf_double_after_conv(sdr.rx_buffer.size(), 0);
     std::vector<double> magnitude(sdr.rx_mtu, 0);
 
     while (sh_data->quit == false) {
         if (!sh_data->cont_time) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
             continue;
         }
 
-        int bits_size = bits_per_symbol(sh_data->modul_type);
+        int bits_size = bits_per_symbol(sh_data->modul_type_TX);
         size_t max_symbols = sdr.tx_mtu / sh_data->upsample_koef;
 
         size_t required_bits = max_symbols * bits_size;
@@ -126,12 +140,12 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         if (impulse.size() != required_impulse)
             impulse.assign(required_impulse, 1.0);
 
-        if (impulse_int16_t.size() != required_impulse)
-            impulse_int16_t.assign(required_impulse, 1);
+        if (impulse_double.size() != required_impulse)
+            impulse_double.assign(required_impulse, 1.0);
 
         for (size_t i = 0; i < bits.size(); i++) bits[i] = rand() % 2;
 
-        modulate(bits, symbols, sh_data->modul_type);
+        modulate(bits, symbols, sh_data->modul_type_TX);
         UpSampler(symbols, symbols_ups, sh_data->upsample_koef);
         filter(symbols_ups, impulse);
 
@@ -230,24 +244,37 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             (void)st;
         }
 
-        filter_int16_t(sdr.rx_buffer, impulse_int16_t, rx_buffer_after_conv);
+        std::transform(sdr.rx_buffer.begin(), sdr.rx_buffer.end(), rx_buffer_double.begin(), [](int16_t v) { return static_cast<double>(v); });
+        norm(rx_buffer_double);
+        filter_double(rx_buffer_double, impulse_double, rx_buffer_after_conv);
+        norm_after_conv(rx_buffer_after_conv, sh_data->upsample_koef);
 
         for (size_t i = 0; i < sdr.rx_mtu; ++i) {
             sh_data->real_p_aft_con[i] = rx_buffer_after_conv[i * 2];
             sh_data->imag_p_aft_con[i] = rx_buffer_after_conv[i * 2 + 1];
         }
 
+        if (sh_data->freq_sync) {
+            for (size_t i = 0; i < sh_data->real_p_aft_con.size(); ++i) {
+                costas.costas_step(sh_data->real_p_aft_con[i], sh_data->imag_p_aft_con[i], sh_data->real_p_aft_cost[i], sh_data->imag_p_aft_cost[i], sh_data->costas_Kp, sh_data->costas_Ki, sh_data->costas_loop_mode ? sh_data->modul_type_RX : sh_data->modul_type_TX);
+                sh_data->costas_phase = costas.get_phase();
+                sh_data->costas_freq = costas.get_freq();
+                if (sh_data->reset_costas_state) {
+                    costas.reset_costas_state();
+                    sh_data->reset_costas_state = false;
+                }
+            }
+        }
+
         if (sh_data->symb_sync) {
-            std::transform(rx_buffer_after_conv.begin(), rx_buffer_after_conv.end(), rx_buf_double_after_conv.begin(), [](int16_t v) { return static_cast<double>(v); });
-            norm(rx_buf_double_after_conv);
-            symbols_sync(rx_buf_double_after_conv, sh_data->offset, sh_data->BnTs, sh_data->Kp, sh_data->upsample_koef);
-            for (size_t i = 0; i + 10 < rx_buf_double_after_conv.size() / 2; i += 10) {
+            symbols_sync(sh_data->real_p_aft_cost, sh_data->imag_p_aft_cost, sh_data->offset, sh_data->gardner_BnTs, sh_data->gardner_Kp, sh_data->upsample_koef);
+            for (size_t i = 0; i + 10 < sh_data->real_p_aft_cost.size(); i += 10) {
                 size_t k = i + sh_data->offset[i / 10];
 
-                if (k >= rx_buf_double_after_conv.size() / 2) break;
+                if (k >= sh_data->real_p_aft_cost.size()) break;
 
-                sh_data->real_p_aft_gar[i / 10] = rx_buf_double_after_conv[2 * k];
-                sh_data->imag_p_aft_gar[i / 10] = rx_buf_double_after_conv[2 * k + 1];
+                sh_data->real_p_aft_gar[i / 10] = sh_data->real_p_aft_cost[k];
+                sh_data->imag_p_aft_gar[i / 10] = sh_data->imag_p_aft_cost[k];
             }
         }
     }
@@ -314,6 +341,7 @@ void run_gui(sharedData *sh_data) {
             float quoter_w = size.x * 0.25f;
             float quoter_h = size.y * 0.33f;
             float tr_quoter_w = size.x * 0.75f;
+
             ImGui::BeginChild("Constellation Diagram", ImVec2(quoter_w, quoter_h), true);
                 if (ImPlot::BeginPlot("Constellation Diagram")) {
                     ImPlot::PlotScatter("I/Q", sh_data->real_p.data(), sh_data->imag_p.data(), sh_data->imag_p.size());
@@ -375,11 +403,19 @@ void run_gui(sharedData *sh_data) {
                 }
             ImGui::EndChild();
 
-            ImGui::BeginChild("Gardner Offset", ImVec2(size.x, quoter_h), true);
-            if (ImPlot::BeginPlot("Gardner Offset")) {
-                ImPlot::PlotLine("Gardner Offset", sh_data->offset.data(), sh_data->offset.size());
+            ImGui::BeginChild("Costas Loop", ImVec2(quoter_w, quoter_h), true);
+            if (ImPlot::BeginPlot("Costas Loop")) {
+                ImPlot::PlotScatter("Costas Loop", sh_data->real_p_aft_cost.data(), sh_data->imag_p_aft_cost.data(), sh_data->imag_p_aft_cost.size());
                 ImPlot::EndPlot();
             }
+            ImGui::EndChild();
+            ImGui::SameLine();
+            ImGui::BeginChild("I/Q samples After Costas Loop", ImVec2(tr_quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("I/Q samples After Costas Loop")) {
+                    ImPlot::PlotLine("I", sh_data->real_p_aft_cost.data(), sh_data->real_p_aft_cost.size());
+                    ImPlot::PlotLine("Q", sh_data->imag_p_aft_cost.data(), sh_data->imag_p_aft_cost.size());
+                    ImPlot::EndPlot();
+                }
             ImGui::EndChild();
         ImGui::End();
 
@@ -388,19 +424,41 @@ void run_gui(sharedData *sh_data) {
         if (ImGui::BeginTabBar("Control Panel")) {
             if (ImGui::BeginTabItem("Config")) {
                 ImGui::SeparatorText("Pre Modulation");
-                const char* current_label = nullptr;
-                switch (sh_data->modul_type) {
-                    case ModulationType::BPSK: current_label = "BPSK"; break;
-                    case ModulationType::QPSK: current_label = "QPSK"; break;
-                    case ModulationType::QAM16: current_label = "QAM16"; break;
+                const char* rx_mod_type = nullptr;
+                const char* tx_mod_type = nullptr;
+                const char* costas_lop_mode = nullptr;
+
+                switch (sh_data->modul_type_RX) {
+                    case ModulationType::BPSK: rx_mod_type = "RX Modulation BPSK"; break;
+                    case ModulationType::QPSK: rx_mod_type = "RX Modulation QPSK"; break;
+                    case ModulationType::QAM16: rx_mod_type = "RX Modulation QAM16"; break;
+                }
+                switch (sh_data->modul_type_TX) {
+                    case ModulationType::BPSK: tx_mod_type = "TX Modulation BPSK"; break;
+                    case ModulationType::QPSK: tx_mod_type = "TX Modulation QPSK"; break;
+                    case ModulationType::QAM16: tx_mod_type = "TX Modulation QAM16"; break;
                 }
 
-                if (ImGui::BeginCombo("Modulation Type", current_label)) {
-                    if (ImGui::Selectable("BPSK", sh_data->modul_type == ModulationType::BPSK)) sh_data->modul_type = ModulationType::BPSK;
-                    if (ImGui::Selectable("QPSK", sh_data->modul_type == ModulationType::QPSK)) sh_data->modul_type = ModulationType::QPSK;
-                    if (ImGui::Selectable("QAM16", sh_data->modul_type == ModulationType::QAM16)) sh_data->modul_type = ModulationType::QAM16;
+                if (sh_data->costas_loop_mode) {
+                    costas_lop_mode = "Costas Loop RX";
+                } else {
+                    costas_lop_mode = "Costas Loop TX";
+                }
+
+                if (ImGui::BeginCombo("RX Modulation Type", rx_mod_type)) {
+                    if (ImGui::Selectable("BPSK", sh_data->modul_type_RX == ModulationType::BPSK)) sh_data->modul_type_RX = ModulationType::BPSK;
+                    if (ImGui::Selectable("QPSK", sh_data->modul_type_RX == ModulationType::QPSK)) sh_data->modul_type_RX = ModulationType::QPSK;
+                    if (ImGui::Selectable("QAM16", sh_data->modul_type_RX == ModulationType::QAM16)) sh_data->modul_type_RX = ModulationType::QAM16;
                     ImGui::EndCombo();
                 }
+
+                if (ImGui::BeginCombo("TX Modulation Type", tx_mod_type)) {
+                    if (ImGui::Selectable("BPSK", sh_data->modul_type_TX == ModulationType::BPSK)) sh_data->modul_type_TX = ModulationType::BPSK;
+                    if (ImGui::Selectable("QPSK", sh_data->modul_type_TX == ModulationType::QPSK)) sh_data->modul_type_TX = ModulationType::QPSK;
+                    if (ImGui::Selectable("QAM16", sh_data->modul_type_TX == ModulationType::QAM16)) sh_data->modul_type_TX = ModulationType::QAM16;
+                    ImGui::EndCombo();
+                }
+
                 ImGui::InputInt("Upsample Coefficient", &sh_data->upsample_koef, 1, 1e1);
 
                 ImGui::SeparatorText("SDR Configuration");
@@ -411,13 +469,13 @@ void run_gui(sharedData *sh_data) {
                 if (ImGui::DragFloat("TX Gain", &sh_data->tx_gain, 0.25f, 0.f, 89.f)) {
                     sh_data->changed_tx_gain = true;
                 }
-                if (ImGui::InputDouble("RX Frequency", &sh_data->rx_frequency, 1e2)) {
+                if (ImGui::InputDouble("RX Frequency", &sh_data->rx_frequency, 1e2, 1e3)) {
                     sh_data->changed_rx_freq = true;
                 }
-                if (ImGui::InputDouble("TX Frequency", &sh_data->tx_frequency, 1e2)) {
+                if (ImGui::InputDouble("TX Frequency", &sh_data->tx_frequency, 1e2, 1e3)) {
                     sh_data->changed_tx_freq = true;
                 }
-                if (ImGui::InputDouble("Sample Rate", &sh_data->sample_rate, 1e5)) {
+                if (ImGui::InputDouble("Sample Rate", &sh_data->sample_rate, 1e5, 1e6)) {
                     sh_data->changed_sample_rate = true;
                 }
                 if (ImGui::SliderInt("RX Bandwidth", &cur_rx_bandwidth, 0, bandwidths.size() - 1, std::to_string(bandwidths[cur_rx_bandwidth]).c_str())) {
@@ -429,17 +487,38 @@ void run_gui(sharedData *sh_data) {
                     sh_data->changed_tx_bandwidth = true;
                 }
 
+                ImGui::SeparatorText("Costas Loop Configuration");
+                ImGui::Checkbox("Costas Loop(on/off)", &sh_data->freq_sync);
+                ImGui::InputDouble("Costas Kp Value", &sh_data->costas_Kp, 0.01, 0.1);
+                ImGui::InputDouble("Costas Ki Value", &sh_data->costas_Ki, 0.001, 0.01);
+                if (ImGui::BeginCombo("Costas Loop Mode", costas_lop_mode)) {
+                    if (ImGui::Selectable("RX", sh_data->costas_loop_mode == true)) sh_data->costas_loop_mode = true;
+                    if (ImGui::Selectable("TX", sh_data->costas_loop_mode == false)) sh_data->costas_loop_mode = false;
+                    ImGui::EndCombo();
+                }
+                if (ImGui::Button("Reset Costas State")) {
+                    sh_data->reset_costas_state = !sh_data->reset_costas_state;
+                }
+
                 ImGui::SeparatorText("Gardner Configuration");
                 ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
-                ImGui::InputDouble("BnTs Value", &sh_data->BnTs, 1, 1e1);
-                ImGui::InputDouble("Kp Value", &sh_data->Kp, 1, 1e1);
+                ImGui::InputDouble("Gardner BnTs Value", &sh_data->gardner_BnTs, 1, 1e1);
+                ImGui::InputDouble("Gardner Kp Value", &sh_data->gardner_Kp, 1, 1e1);
+
+
 
                 ImGui::SeparatorText("Time Control");
-                const char* label = sh_data->cont_time ? "Running" : "Stopped";
+                const char* label_time = sh_data->cont_time ? "Running" : "Stopped";
 
-                if (ImGui::Button(label)) {
+                if (ImGui::Button(label_time)) {
                     sh_data->cont_time = !sh_data->cont_time;
                 }
+
+                ImGui::SeparatorText("Costas Loop State");
+                ImGui::Text("Phase: %.6f Freq: %.6f", sh_data->costas_phase, sh_data->costas_freq);
+
+                ImGui::SeparatorText("Gardner State");
+                ImGui::Text("Offset: %d", sh_data->offset.back());
 
                 ImGui::EndTabItem();
             }

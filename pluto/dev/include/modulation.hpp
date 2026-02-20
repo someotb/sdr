@@ -48,8 +48,21 @@ void filter(std::vector<std::complex<double>>& symbols_ups, const std::vector<st
 
 int bits_per_symbol(ModulationType type);
 
-void filter_int16_t(std::vector<int16_t>& symbols_ups, const std::vector<int16_t>& impulse, std::vector<int16_t>& output);
+void filter_double(std::vector<double>& symbols_ups, const std::vector<double>& impulse, std::vector<double>& output);
 
-void norm(std::vector<double>& rx_buffer_after_convolve);
+void norm(std::vector<double>& rx_buff);
 
-void symbols_sync(const std::vector<double>& rx_buffer_after_convolve, std::vector<int>& offset, double& BnTs, double& Kp, int& Nsp);
+void norm_after_conv(std::vector<double>& rx, int sps);
+
+void symbols_sync(std::vector<double>& real_pa, std::vector<double>& imag_pa, std::vector<int>& offset, double& BnTs, double& Kp, int& Nsp);
+
+struct CostasState {
+    double phase = 0.0;
+    double freq = 0.0;
+
+    void costas_step(double& I_orig, double& Q_orig, double& I_new, double& Q_new, double& Kp, double& Ki, ModulationType& mod_type);
+    double get_phase();
+    double get_freq();
+    double QAM16slicer(double x);
+    void reset_costas_state();
+};

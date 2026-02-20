@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex.h>
+#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -81,7 +82,7 @@ void filter(std::vector<std::complex<double>>& symbols_ups, const std::vector<st
     symbols_ups.swap(output);
 }
 
-void filter_int16_t(std::vector<int16_t>& symbols_ups, const std::vector<int16_t>& impulse, std::vector<int16_t>& output) {
+void filter_double(std::vector<double>& symbols_ups, const std::vector<double>& impulse, std::vector<double>& output) {
     size_t n = symbols_ups.size() / 2;
     size_t L = impulse.size();
     fill(output.begin(), output.end(), 0);
@@ -95,25 +96,17 @@ void filter_int16_t(std::vector<int16_t>& symbols_ups, const std::vector<int16_t
 }
 
 void norm(std::vector<double>& rx) {
-    double max_val = 0.0;
-    for (double e : rx) max_val = std::max(max_val, std::abs(e));
-    if (max_val == 0.0) return;
-    double scale = 1.0 / max_val;
-    for (double& e : rx) e *= scale;
+    for (double& e : rx) e /= 32768.0;
 }
 
-void symbols_sync(const std::vector<double>& rx_buffer_after_convolve, std::vector<int>& offset, double& BnTs, double& Kp, int& Nsp) {
-    std::vector<double> real_pa(rx_buffer_after_convolve.size() / 2);
-    std::vector<double> imag_pa(rx_buffer_after_convolve.size() / 2);
+void norm_after_conv(std::vector<double>& rx, int sps) {
+    for (double& e : rx) e /= sps;
+}
 
+void symbols_sync(std::vector<double>& real_pa, std::vector<double>& imag_pa, std::vector<int>& offset, double& BnTs, double& Kp, int& Nsp) {
     double zeta = sqrt(2.0)/2.0;
     int tmp_offset = 0;
     double p2 = 0.0;
-
-    for (size_t i = 0; i < rx_buffer_after_convolve.size() / 2; ++i) {
-        real_pa[i] = rx_buffer_after_convolve[2 * i];
-        imag_pa[i] = rx_buffer_after_convolve[2 * i + 1];
-    }
 
     double teta = (BnTs) / (zeta + 1.0 / (4.0 * zeta));
     double K1 = (4 * zeta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
@@ -132,10 +125,57 @@ void symbols_sync(const std::vector<double>& rx_buffer_after_convolve, std::vect
         p2 += p1 + error * K2;
 
         while(p2 > 1.0) p2 -= 1.0;
-        while(p2 < 0.0) p2 += 1.0;
+        while(p2 < -1.0) p2 += 1.0;
 
         tmp_offset = static_cast<int>(p2 * Nsp);
 
         offset[ns / Nsp] = tmp_offset;
     }
+}
+
+void CostasState::costas_step(double& I_orig, double& Q_orig, double& I_new, double& Q_new, double& Kp, double& Ki, ModulationType& mod_type) {
+    double cos_p = cos(phase);
+    double sin_p = sin(phase);
+    double error = 0.0;
+
+    double I_rot = I_orig * cos_p + Q_orig * sin_p;
+    double Q_rot = -I_orig * sin_p + Q_orig * cos_p;
+
+    if (mod_type == ModulationType::BPSK) {
+        error = (I_rot >= 0 ? 1 : -1) * Q_rot;
+    } else if (mod_type == ModulationType::QPSK) {
+        error = (I_rot >= 0 ? 1 : -1) * Q_rot - (Q_rot >= 0 ? 1 : -1) * I_rot;
+    } else {
+        double I_d = QAM16slicer(I_rot);
+        double Q_d = QAM16slicer(Q_rot);
+        error = I_d * Q_rot - Q_d * I_rot;
+    }
+
+    freq += Ki * error;
+    phase += freq + Kp * error;
+
+    if (phase > M_PI) phase -= 2*M_PI;
+    if (phase < -M_PI) phase += 2*M_PI;
+
+    I_new = I_rot;
+    Q_new = Q_rot;
+}
+
+double CostasState::get_phase() {
+    return phase;
+}
+double CostasState::get_freq() {
+    return freq;
+}
+
+double CostasState::QAM16slicer(double x) {
+    if (x < -2.0) return -3.0;
+    else if (x < 0.0) return -1.0;
+    else if (x < 2.0) return 1.0;
+    else return 3.0;
+}
+
+void CostasState::reset_costas_state() {
+    phase = 0.0;
+    freq = 0.0;
 }
