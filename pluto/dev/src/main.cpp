@@ -95,6 +95,7 @@ struct sharedData
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
     CostasState costas;
+    GardnerState gardner(sh_data->upsample_koef);
 
     fftw_complex* in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
     fftw_complex* out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
@@ -267,7 +268,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         }
 
         if (sh_data->symb_sync) {
-            symbols_sync(sh_data->real_p_aft_cost, sh_data->imag_p_aft_cost, sh_data->offset, sh_data->gardner_BnTs, sh_data->gardner_Kp, sh_data->upsample_koef);
+            gardner.gardner_step(sh_data->real_p_aft_cost, sh_data->imag_p_aft_cost, sh_data->offset, sh_data->gardner_BnTs, sh_data->upsample_koef);
             for (size_t i = 0; i + 10 < sh_data->real_p_aft_cost.size(); i += 10) {
                 size_t k = i + sh_data->offset[i / 10];
 
@@ -357,17 +358,17 @@ void run_gui(sharedData *sh_data) {
                 }
             ImGui::EndChild();
 
-            ImGui::BeginChild("Constellation Diagram After Convolve", ImVec2(quoter_w, quoter_h), true);
-                if (ImPlot::BeginPlot("Constellation Diagram After Convolve")) {
-                    ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_con.data(), sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
-                    ImPlot::EndPlot();
-                }
+            ImGui::BeginChild("Costas Loop", ImVec2(quoter_w, quoter_h), true);
+            if (ImPlot::BeginPlot("Costas Loop")) {
+                ImPlot::PlotScatter("Costas Loop", sh_data->real_p_aft_cost.data(), sh_data->imag_p_aft_cost.data(), sh_data->imag_p_aft_cost.size());
+                ImPlot::EndPlot();
+            }
             ImGui::EndChild();
             ImGui::SameLine();
-            ImGui::BeginChild("I/Q samples After Convolve", ImVec2(tr_quoter_w, quoter_h), true);
-                if (ImPlot::BeginPlot("I/Q samples After Convolve")) {
-                    ImPlot::PlotLine("I", sh_data->real_p_aft_con.data(), sh_data->real_p_aft_con.size());
-                    ImPlot::PlotLine("Q", sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
+            ImGui::BeginChild("I/Q samples After Costas Loop", ImVec2(tr_quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("I/Q samples After Costas Loop")) {
+                    ImPlot::PlotLine("I", sh_data->real_p_aft_cost.data(), sh_data->real_p_aft_cost.size());
+                    ImPlot::PlotLine("Q", sh_data->imag_p_aft_cost.data(), sh_data->imag_p_aft_cost.size());
                     ImPlot::EndPlot();
                 }
             ImGui::EndChild();
@@ -403,17 +404,18 @@ void run_gui(sharedData *sh_data) {
                 }
             ImGui::EndChild();
 
-            ImGui::BeginChild("Costas Loop", ImVec2(quoter_w, quoter_h), true);
-            if (ImPlot::BeginPlot("Costas Loop")) {
-                ImPlot::PlotScatter("Costas Loop", sh_data->real_p_aft_cost.data(), sh_data->imag_p_aft_cost.data(), sh_data->imag_p_aft_cost.size());
-                ImPlot::EndPlot();
-            }
+
+            ImGui::BeginChild("Constellation Diagram After Convolve", ImVec2(quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("Constellation Diagram After Convolve")) {
+                    ImPlot::PlotScatter("I/Q", sh_data->real_p_aft_con.data(), sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
+                    ImPlot::EndPlot();
+                }
             ImGui::EndChild();
             ImGui::SameLine();
-            ImGui::BeginChild("I/Q samples After Costas Loop", ImVec2(tr_quoter_w, quoter_h), true);
-                if (ImPlot::BeginPlot("I/Q samples After Costas Loop")) {
-                    ImPlot::PlotLine("I", sh_data->real_p_aft_cost.data(), sh_data->real_p_aft_cost.size());
-                    ImPlot::PlotLine("Q", sh_data->imag_p_aft_cost.data(), sh_data->imag_p_aft_cost.size());
+            ImGui::BeginChild("I/Q samples After Convolve", ImVec2(tr_quoter_w, quoter_h), true);
+                if (ImPlot::BeginPlot("I/Q samples After Convolve")) {
+                    ImPlot::PlotLine("I", sh_data->real_p_aft_con.data(), sh_data->real_p_aft_con.size());
+                    ImPlot::PlotLine("Q", sh_data->imag_p_aft_con.data(), sh_data->imag_p_aft_con.size());
                     ImPlot::EndPlot();
                 }
             ImGui::EndChild();
@@ -504,8 +506,6 @@ void run_gui(sharedData *sh_data) {
                 ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
                 ImGui::InputDouble("Gardner BnTs Value", &sh_data->gardner_BnTs, 1, 1e1);
                 ImGui::InputDouble("Gardner Kp Value", &sh_data->gardner_Kp, 1, 1e1);
-
-
 
                 ImGui::SeparatorText("Time Control");
                 const char* label_time = sh_data->cont_time ? "Running" : "Stopped";

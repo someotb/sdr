@@ -103,33 +103,49 @@ void norm_after_conv(std::vector<double>& rx, int sps) {
     for (double& e : rx) e /= sps;
 }
 
-void symbols_sync(std::vector<double>& real_pa, std::vector<double>& imag_pa, std::vector<int>& offset, double& BnTs, double& Kp, int& Nsp) {
+void GardnerState::gardner_step(
+    std::vector<double>& real_pa,
+    std::vector<double>& imag_pa,
+    std::vector<int>& offset,
+    double& BnTs,
+    int& Nsp)
+{
     double zeta = sqrt(2.0)/2.0;
-    int tmp_offset = 0;
-    double p2 = 0.0;
 
-    double teta = (BnTs) / (zeta + 1.0 / (4.0 * zeta));
-    double K1 = (4 * zeta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
-    double K2 = (4 * teta * teta) / ((1 + 2 * zeta * teta + teta * teta) * Kp);
+    double teta = BnTs / (zeta + 1.0/(4.0*zeta));
+    double K1 = (4*zeta*teta)/(1+2*zeta*teta+teta*teta);
+    double K2 = (4*teta*teta)/(1+2*zeta*teta+teta*teta);
 
-    for (size_t ns = 0; ns < real_pa.size(); ns += Nsp) {
-        int n = tmp_offset;
+    size_t out_index = 0;
 
-        if (ns + n + Nsp >= real_pa.size()) break;
+    for (size_t n = Nsp; n + Nsp < real_pa.size(); ++n)
+    {
+        if (mu >= 1.0)
+        {
+            mu -= 1.0;
 
-        double real_part = (real_pa[ns + n] - real_pa[Nsp + ns + n]) * real_pa[n + static_cast<int>(Nsp / 2) + ns];
-        double imag_part = (imag_pa[ns + n] - imag_pa[Nsp + ns + n]) * imag_pa[n + static_cast<int>(Nsp / 2) + ns];
-        double error = real_part + imag_part;
+            int idx = n;
 
-        double p1 = error * K1;
-        p2 += p1 + error * K2;
+            double early_r = real_pa[idx - Nsp];
+            double late_r  = real_pa[idx];
+            double mid_r   = real_pa[idx - Nsp/2];
 
-        while(p2 > 1.0) p2 -= 1.0;
-        while(p2 < -1.0) p2 += 1.0;
+            double early_i = imag_pa[idx - Nsp];
+            double late_i  = imag_pa[idx];
+            double mid_i   = imag_pa[idx - Nsp/2];
 
-        tmp_offset = static_cast<int>(p2 * Nsp);
+            double error =
+                (early_r - late_r)*mid_r +
+                (early_i - late_i)*mid_i;
 
-        offset[ns / Nsp] = tmp_offset;
+            integrator += K2 * error;
+            double control = integrator + K1 * error;
+
+            mu += control;
+
+            offset[out_index++] = (int)(mu * Nsp);
+        }
+        mu += 1.0 / omega;
     }
 }
 

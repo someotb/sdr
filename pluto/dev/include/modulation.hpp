@@ -54,7 +54,17 @@ void norm(std::vector<double>& rx_buff);
 
 void norm_after_conv(std::vector<double>& rx, int sps);
 
-void symbols_sync(std::vector<double>& real_pa, std::vector<double>& imag_pa, std::vector<int>& offset, double& BnTs, double& Kp, int& Nsp);
+
+class GardnerState {
+public:
+    double mu = 0.0;
+    double omega;
+    double integrator = 0.0;
+
+    void gardner_step(std::vector<double>& real_pa, std::vector<double>& imag_pa, std::vector<int>& offset, double& BnTs, int& Nsp);
+
+    GardnerState(int Sps) : omega(Sps) {}
+};
 
 struct CostasState {
     double phase = 0.0;
