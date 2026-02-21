@@ -69,8 +69,7 @@ struct sharedData
     double sample_rate = 1e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
-    double gardner_BnTs = 0.0;
-    double gardner_Kp = 1.0;
+    double gardner_BnTs = 0.001;
     double costas_Kp = 0.05;
     double costas_Ki = 0.001;
     double costas_phase = 0;
@@ -79,11 +78,11 @@ struct sharedData
     sharedData(size_t rx_mtu) {
         imag_p_aft_cost.resize(rx_mtu, 0);
         real_p_aft_cost.resize(rx_mtu, 0);
-        real_p_aft_gar.resize(rx_mtu / 10, 0);
-        imag_p_aft_gar.resize(rx_mtu / 10, 0);
+        real_p_aft_gar.resize(rx_mtu / upsample_koef, 0);
+        imag_p_aft_gar.resize(rx_mtu / upsample_koef, 0);
         real_p_aft_con.resize(rx_mtu, 0);
         imag_p_aft_con.resize(rx_mtu, 0);
-        offset.resize(rx_mtu / 10, 0);
+        offset.resize(rx_mtu / upsample_koef, 0);
         real_p.resize(rx_mtu, 0);
         imag_p.resize(rx_mtu, 0);
         shifted_magnitude.resize(rx_mtu, 0);
@@ -95,7 +94,7 @@ struct sharedData
 void run_backend(sharedData *sh_data, char *argv[]) {
     SDRDevice sdr(argv[1]);
     CostasState costas;
-    GardnerState gardner(sh_data->upsample_koef);
+    GardnerState gardner;
 
     fftw_complex* in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
     fftw_complex* out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu);
@@ -112,7 +111,6 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     std::vector<double> impulse_double;
     std::vector<double> rx_buffer_double(sdr.rx_buffer.size(), 0);
     std::vector<double> rx_buffer_after_conv(sdr.rx_buffer.size(), 0);
-    std::vector<double> rx_buf_double_after_conv(sdr.rx_buffer.size(), 0);
     std::vector<double> magnitude(sdr.rx_mtu, 0);
 
     while (sh_data->quit == false) {
@@ -505,7 +503,6 @@ void run_gui(sharedData *sh_data) {
                 ImGui::SeparatorText("Gardner Configuration");
                 ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
                 ImGui::InputDouble("Gardner BnTs Value", &sh_data->gardner_BnTs, 1, 1e1);
-                ImGui::InputDouble("Gardner Kp Value", &sh_data->gardner_Kp, 1, 1e1);
 
                 ImGui::SeparatorText("Time Control");
                 const char* label_time = sh_data->cont_time ? "Running" : "Stopped";

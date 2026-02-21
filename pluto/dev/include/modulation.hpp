@@ -62,8 +62,6 @@ public:
     double integrator = 0.0;
 
     void gardner_step(std::vector<double>& real_pa, std::vector<double>& imag_pa, std::vector<int>& offset, double& BnTs, int& Nsp);
-
-    GardnerState(int Sps) : omega(Sps) {}
 };
 
 struct CostasState {

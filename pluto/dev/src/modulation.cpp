@@ -145,7 +145,7 @@ void GardnerState::gardner_step(
 
             offset[out_index++] = (int)(mu * Nsp);
         }
-        mu += 1.0 / omega;
+        mu += 1.0 / Nsp;
     }
 }
 
