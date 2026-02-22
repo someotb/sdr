@@ -2,6 +2,7 @@
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Types.h>
 #include <algorithm>
+#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <stdio.h>
@@ -69,8 +70,9 @@ struct sharedData
     double sample_rate = 1e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
-    double gardner_BnTs = 0.001;
-    double costas_Kp = 0.05;
+    double gardner_BnTs = 2.00;
+    double gardner_Kp = 1.0;
+    double costas_Kp = 0.07;
     double costas_Ki = 0.001;
     double costas_phase = 0;
     double costas_freq = 0;
@@ -108,6 +110,8 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     std::vector<std::complex<double>> symbols;
     std::vector<std::complex<double>> symbols_ups;
     std::vector<std::complex<double>> impulse;
+    std::vector<std::complex<double>> aft_gather(sdr.rx_mtu, 0);
+    std::vector<std::complex<double>> aft_gardner(sdr.rx_mtu / sh_data->upsample_koef, 0);
     std::vector<double> impulse_double;
     std::vector<double> rx_buffer_double(sdr.rx_buffer.size(), 0);
     std::vector<double> rx_buffer_after_conv(sdr.rx_buffer.size(), 0);
@@ -244,9 +248,8 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         }
 
         std::transform(sdr.rx_buffer.begin(), sdr.rx_buffer.end(), rx_buffer_double.begin(), [](int16_t v) { return static_cast<double>(v); });
-        norm(rx_buffer_double);
         filter_double(rx_buffer_double, impulse_double, rx_buffer_after_conv);
-        norm_after_conv(rx_buffer_after_conv, sh_data->upsample_koef);
+        norm_max(rx_buffer_after_conv);
 
         for (size_t i = 0; i < sdr.rx_mtu; ++i) {
             sh_data->real_p_aft_con[i] = rx_buffer_after_conv[i * 2];
@@ -266,14 +269,11 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         }
 
         if (sh_data->symb_sync) {
-            gardner.gardner_step(sh_data->real_p_aft_cost, sh_data->imag_p_aft_cost, sh_data->offset, sh_data->gardner_BnTs, sh_data->upsample_koef);
-            for (size_t i = 0; i + 10 < sh_data->real_p_aft_cost.size(); i += 10) {
-                size_t k = i + sh_data->offset[i / 10];
-
-                if (k >= sh_data->real_p_aft_cost.size()) break;
-
-                sh_data->real_p_aft_gar[i / 10] = sh_data->real_p_aft_cost[k];
-                sh_data->imag_p_aft_gar[i / 10] = sh_data->imag_p_aft_cost[k];
+            gardner.gather(sh_data->real_p_aft_cost, sh_data->imag_p_aft_cost, aft_gather);
+            aft_gardner = gardner.gardnerr(aft_gather, sh_data->gardner_BnTs, sh_data->upsample_koef, sh_data->gardner_Kp);
+            for (size_t i = 0; i < aft_gardner.size(); ++i) {
+                sh_data->real_p_aft_gar[i] = std::real(aft_gardner[i]);
+                sh_data->imag_p_aft_gar[i] = std::imag(aft_gardner[i]);
             }
         }
     }
@@ -502,7 +502,8 @@ void run_gui(sharedData *sh_data) {
 
                 ImGui::SeparatorText("Gardner Configuration");
                 ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
-                ImGui::InputDouble("Gardner BnTs Value", &sh_data->gardner_BnTs, 1, 1e1);
+                ImGui::InputDouble("Gardner BnTs Value", &sh_data->gardner_BnTs, 1e-1, 1e-2);
+                ImGui::InputDouble("Gardner Kp Value", &sh_data->gardner_Kp, 1e-1, 1e-2);
 
                 ImGui::SeparatorText("Time Control");
                 const char* label_time = sh_data->cont_time ? "Running" : "Stopped";
@@ -512,10 +513,8 @@ void run_gui(sharedData *sh_data) {
                 }
 
                 ImGui::SeparatorText("Costas Loop State");
-                ImGui::Text("Phase: %.6f Freq: %.6f", sh_data->costas_phase, sh_data->costas_freq);
-
-                ImGui::SeparatorText("Gardner State");
-                ImGui::Text("Offset: %d", sh_data->offset.back());
+                ImGui::Text("Phase: %.6f", sh_data->costas_phase);
+                ImGui::Text("Freq: %.6f", sh_data->costas_freq);
 
                 ImGui::EndTabItem();
             }

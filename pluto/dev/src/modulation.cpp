@@ -6,8 +6,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <iterator>
 #include <stdexcept>
 #include <vector>
+#include <algorithm>
 
 // According to 3GPP TS 38.211 section 5.1.3:
 void modulate(const std::vector<int16_t>& bits, std::vector<std::complex<double>>& symbols, ModulationType modulation_type) {
@@ -95,58 +97,61 @@ void filter_double(std::vector<double>& symbols_ups, const std::vector<double>& 
     }
 }
 
-void norm(std::vector<double>& rx) {
-    for (double& e : rx) e /= 32768.0;
+void norm_max(std::vector<double>& rx) {
+    auto it = std::max_element(rx.begin(), rx.end());
+    auto max_elemet = *it;
+    for (auto& e : rx) e /= max_elemet;
 }
 
-void norm_after_conv(std::vector<double>& rx, int sps) {
-    for (double& e : rx) e /= sps;
-}
-
-void GardnerState::gardner_step(
-    std::vector<double>& real_pa,
-    std::vector<double>& imag_pa,
-    std::vector<int>& offset,
-    double& BnTs,
-    int& Nsp)
-{
-    double zeta = sqrt(2.0)/2.0;
-
-    double teta = BnTs / (zeta + 1.0/(4.0*zeta));
-    double K1 = (4*zeta*teta)/(1+2*zeta*teta+teta*teta);
-    double K2 = (4*teta*teta)/(1+2*zeta*teta+teta*teta);
-
-    size_t out_index = 0;
-
-    for (size_t n = Nsp; n + Nsp < real_pa.size(); ++n)
-    {
-        if (mu >= 1.0)
-        {
-            mu -= 1.0;
-
-            int idx = n;
-
-            double early_r = real_pa[idx - Nsp];
-            double late_r  = real_pa[idx];
-            double mid_r   = real_pa[idx - Nsp/2];
-
-            double early_i = imag_pa[idx - Nsp];
-            double late_i  = imag_pa[idx];
-            double mid_i   = imag_pa[idx - Nsp/2];
-
-            double error =
-                (early_r - late_r)*mid_r +
-                (early_i - late_i)*mid_i;
-
-            integrator += K2 * error;
-            double control = integrator + K1 * error;
-
-            mu += control;
-
-            offset[out_index++] = (int)(mu * Nsp);
-        }
-        mu += 1.0 / Nsp;
+void GardnerState::gather(std::vector<double>& real_p, std::vector<double>& imag_p, std::vector<std::complex<double>>& gather) {
+    for (size_t i = 0; i < real_p.size(); ++i) {
+        gather[i] = std::complex(real_p[i], imag_p[i]);
     }
+}
+
+std::vector<std::complex<double>> GardnerState::gardnerr(std::vector<std::complex<double>>& input, double& BnTs, int& SPS, double& Kp) {
+    size_t N = input.size();
+    size_t M = N / SPS;
+
+    std::vector<std::complex<double>> output(M);
+
+    double zeta = std::sqrt(2.0) / 2.0;
+    double teta = (BnTs / 10.0) / (zeta + 1.0 / (4.0 * zeta));
+    double K1 = (-4.0 * zeta * teta) / ((1.0 + 2.0 * zeta * teta + teta * teta) * (Kp + 1e-15));
+    double K2 = (-4.0 * teta * teta) / ((1.0 + 2.0 * zeta * teta + teta * teta) * (Kp + 1e-15));
+
+    double p2 = 0.0;
+    int offset = 0;
+
+    for (size_t i = 0; i < M; ++i) {
+        size_t base = SPS * i;
+
+        size_t idx0 = base + offset;
+        size_t idx1 = base + offset + SPS;
+        size_t idxm = base + offset + SPS / 2;
+
+        if (idx1 >= N || idxm >= N)
+            break;
+
+        std::complex<double> s1 = input[idx1];
+        std::complex<double> s0 = input[idx0];
+        std::complex<double> sm = input[idxm];
+
+        double e = (std::real(s1) - std::real(s0)) * std::real(sm) + (std::imag(s1) - std::imag(s0)) * std::imag(sm);
+
+        double p1 = e * K1;
+        p2 += p1 + e * K2;
+        p2 -= std::floor(p2);
+
+        int new_offset = (int)std::round(p2 * SPS);
+
+        offset = new_offset;
+
+        size_t read_idx = SPS * i + offset;
+        output[i] = input[read_idx];
+    }
+
+    return output;
 }
 
 void CostasState::costas_step(double& I_orig, double& Q_orig, double& I_new, double& Q_new, double& Kp, double& Ki, ModulationType& mod_type) {

@@ -50,18 +50,11 @@ int bits_per_symbol(ModulationType type);
 
 void filter_double(std::vector<double>& symbols_ups, const std::vector<double>& impulse, std::vector<double>& output);
 
-void norm(std::vector<double>& rx_buff);
+void norm_max(std::vector<double>& rx);
 
-void norm_after_conv(std::vector<double>& rx, int sps);
-
-
-class GardnerState {
-public:
-    double mu = 0.0;
-    double omega;
-    double integrator = 0.0;
-
-    void gardner_step(std::vector<double>& real_pa, std::vector<double>& imag_pa, std::vector<int>& offset, double& BnTs, int& Nsp);
+struct GardnerState {
+    void gather(std::vector<double>& real_p, std::vector<double>& imag_p, std::vector<std::complex<double>>& gather);
+    std::vector<std::complex<double>> gardnerr(std::vector<std::complex<double>>& input, double& BnTs, int& SPS, double& Kp);
 };
 
 struct CostasState {
