@@ -116,8 +116,8 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     std::vector<std::complex<double>> aft_gardner(sdr.rx_mtu / sh_data->upsample_koef, 0);
     std::vector<double> impulse_double;
     std::vector<double> rrc_impulse;
-    std::vector<double> tx_buffer_double(sdr.tx_mtu * sh_data->upsample_koef, 0);
-    std::vector<double> tx_buffer_double_aft_rrc(sdr.tx_mtu * sh_data->upsample_koef, 0);
+    std::vector<double> tx_buffer_double(2 * sdr.tx_mtu, 0);
+    std::vector<double> tx_buffer_double_aft_rrc(2 * sdr.tx_mtu, 0);
     std::vector<double> rx_buffer_double(sdr.rx_buffer.size(), 0);
     std::vector<double> rx_buffer_after_conv(sdr.rx_buffer.size(), 0);
     std::vector<double> magnitude(sdr.rx_mtu, 0);
@@ -128,12 +128,15 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             continue;
         }
 
+        sh_data->upsample_koef = std::max(sh_data->upsample_koef, 1);
+        sh_data->rrc_span = std::max(sh_data->rrc_span, 1);
+
         int bits_size = bits_per_symbol(sh_data->modul_type_TX);
         size_t max_symbols = sdr.tx_mtu / sh_data->upsample_koef;
 
         size_t required_bits = max_symbols * bits_size;
         size_t required_symbols = max_symbols;
-        size_t required_ups = sdr.tx_mtu * sh_data->upsample_koef;
+        size_t required_ups = sdr.tx_mtu;
         size_t required_impulse = sh_data->upsample_koef;
 
         if (bits.size() != required_bits)
@@ -150,6 +153,13 @@ void run_backend(sharedData *sh_data, char *argv[]) {
 
         if (impulse_double.size() != required_impulse)
             impulse_double.assign(required_impulse, 1.0);
+
+        if (tx_buffer_double.size() != 2 * sdr.tx_mtu)
+            tx_buffer_double.assign(2 * sdr.tx_mtu, 0);
+
+        if (tx_buffer_double_aft_rrc.size() != 2 * sdr.tx_mtu)
+            tx_buffer_double_aft_rrc.assign(2 * sdr.tx_mtu, 0);
+
 
         for (size_t i = 0; i < bits.size(); i++) bits[i] = rand() % 2;
 
