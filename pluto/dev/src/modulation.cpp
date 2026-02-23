@@ -84,15 +84,15 @@ void filter(std::vector<std::complex<double>>& symbols_ups, const std::vector<st
     symbols_ups.swap(output);
 }
 
-void filter_double(std::vector<double>& symbols_ups, const std::vector<double>& impulse, std::vector<double>& output) {
-    size_t n = symbols_ups.size() / 2;
-    size_t L = impulse.size();
-    fill(output.begin(), output.end(), 0);
+void filter_double(std::vector<double>& in, std::vector<double>& h, std::vector<double>& out) {
+    size_t n = in.size() / 2;
+    size_t L = h.size();
+    fill(out.begin(), out.end(), 0);
     for (size_t i = 0; i < n; i++) {
         size_t max_j = std::min(L, i + 1);
         for (size_t j = 0; j < max_j; j++) {
-            output[i * 2] += impulse[j] * symbols_ups[(i - j) * 2];
-            output[i * 2 + 1] += impulse[j] * symbols_ups[(i - j) * 2 + 1];
+            out[i * 2] += h[j] * in[(i - j) * 2];
+            out[i * 2 + 1] += h[j] * in[(i - j) * 2 + 1];
         }
     }
 }
@@ -102,6 +102,27 @@ void norm_max(std::vector<double>& rx) {
     auto max_elemet = *it;
     for (auto& e : rx) e /= max_elemet;
 }
+
+std::vector<double> rrc(int& sps, int& span, double& alpha) {
+    int N = span * sps + 1;
+    std::vector<double> h(N);
+
+    for (int n = 0; n < N; ++n) {
+        double t = (n - N / 2.0) / static_cast<double>(sps);
+
+        if (fabs(t) < 1e-8) {
+            h[n] = 1 - alpha + (4 * alpha / M_PI);
+        } else if (fabs(fabs(t) - 1.0 / (4 * alpha)) < 1e-8) {
+            h[n] = alpha / std::sqrt(2.0) * ((1 + 2 / M_PI) * std::sin(M_PI / (4 * alpha)) + (1 - 2 / M_PI) * cos(M_PI / (4 * alpha)));
+        } else {
+            double numerator = sin(M_PI * t * (1 - alpha)) + 4 * alpha * t * cos(M_PI * t * (1 + alpha));
+            double denominator = M_PI * t * (1 - (4 * alpha * t) * (4 * alpha * t));
+            h[n] = numerator / denominator;
+        }
+    }
+    return h;
+}
+
 
 void GardnerState::gather(std::vector<double>& real_p, std::vector<double>& imag_p, std::vector<std::complex<double>>& gather) {
     for (size_t i = 0; i < real_p.size(); ++i) {

@@ -76,6 +76,8 @@ struct sharedData
     double costas_Ki = 0.001;
     double costas_phase = 0;
     double costas_freq = 0;
+    int rrc_span = 6;
+    double rrc_alpha = 0.22;
 
     sharedData(size_t rx_mtu) {
         imag_p_aft_cost.resize(rx_mtu, 0);
@@ -113,6 +115,9 @@ void run_backend(sharedData *sh_data, char *argv[]) {
     std::vector<std::complex<double>> aft_gather(sdr.rx_mtu, 0);
     std::vector<std::complex<double>> aft_gardner(sdr.rx_mtu / sh_data->upsample_koef, 0);
     std::vector<double> impulse_double;
+    std::vector<double> rrc_impulse;
+    std::vector<double> tx_buffer_double(sdr.tx_mtu * sh_data->upsample_koef, 0);
+    std::vector<double> tx_buffer_double_aft_rrc(sdr.tx_mtu * sh_data->upsample_koef, 0);
     std::vector<double> rx_buffer_double(sdr.rx_buffer.size(), 0);
     std::vector<double> rx_buffer_after_conv(sdr.rx_buffer.size(), 0);
     std::vector<double> magnitude(sdr.rx_mtu, 0);
@@ -148,13 +153,20 @@ void run_backend(sharedData *sh_data, char *argv[]) {
 
         for (size_t i = 0; i < bits.size(); i++) bits[i] = rand() % 2;
 
+        rrc_impulse = rrc(sh_data->upsample_koef, sh_data->rrc_span, sh_data->rrc_alpha);
         modulate(bits, symbols, sh_data->modul_type_TX);
         UpSampler(symbols, symbols_ups, sh_data->upsample_koef);
-        filter(symbols_ups, impulse);
 
         for (size_t i = 0; i < sdr.tx_mtu; i++) {
-            sdr.tx_buffer[2*i] = (real(symbols_ups[i]) * 16000);
-            sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
+            tx_buffer_double[2 * i] = (real(symbols_ups[i]));
+            tx_buffer_double[2 * i + 1] = (imag(symbols_ups[i]));
+        }
+
+        filter_double(tx_buffer_double, rrc_impulse, tx_buffer_double_aft_rrc);
+
+        for (size_t i = 0; i < sdr.tx_mtu; i++) {
+            sdr.tx_buffer[2 * i] = tx_buffer_double_aft_rrc[2 * i] * 16000;
+            sdr.tx_buffer[2 * i + 1] = tx_buffer_double_aft_rrc[2 * i + 1] * 16000;
         }
 
         if (sh_data->changed_rx_gain) {
@@ -248,7 +260,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         }
 
         std::transform(sdr.rx_buffer.begin(), sdr.rx_buffer.end(), rx_buffer_double.begin(), [](int16_t v) { return static_cast<double>(v); });
-        filter_double(rx_buffer_double, impulse_double, rx_buffer_after_conv);
+        filter_double(rx_buffer_double, rrc_impulse, rx_buffer_after_conv);
         norm_max(rx_buffer_after_conv);
 
         for (size_t i = 0; i < sdr.rx_mtu; ++i) {
@@ -504,6 +516,10 @@ void run_gui(sharedData *sh_data) {
                 ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
                 ImGui::InputDouble("Gardner BnTs Value", &sh_data->gardner_BnTs, 1e-1, 1e-2);
                 ImGui::InputDouble("Gardner Kp Value", &sh_data->gardner_Kp, 1e-1, 1e-2);
+
+                ImGui::SeparatorText("RRC Configuration");
+                ImGui::InputDouble("RRC Alpha Value", &sh_data->rrc_alpha, 1e-1, 1e-2);
+                ImGui::InputInt("RRC Span Value", &sh_data->rrc_span, 1);
 
                 ImGui::SeparatorText("Time Control");
                 const char* label_time = sh_data->cont_time ? "Running" : "Stopped";

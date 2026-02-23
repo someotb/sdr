@@ -48,9 +48,11 @@ void filter(std::vector<std::complex<double>>& symbols_ups, const std::vector<st
 
 int bits_per_symbol(ModulationType type);
 
-void filter_double(std::vector<double>& symbols_ups, const std::vector<double>& impulse, std::vector<double>& output);
+void filter_double(std::vector<double>& in, std::vector<double>& h, std::vector<double>& out);
 
 void norm_max(std::vector<double>& rx);
+
+std::vector<double> rrc(int& sps, int& span, double& alpha);
 
 struct GardnerState {
     void gather(std::vector<double>& real_p, std::vector<double>& imag_p, std::vector<std::complex<double>>& gather);
