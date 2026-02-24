@@ -49,6 +49,7 @@ struct sharedData
     std::vector<double> argument;
     std::vector<double> frequency_axis;
     bool send = false;
+    bool rrc_filter = false;
     bool symb_sync = false;
     bool freq_sync = false;
     bool quit = false;
@@ -76,8 +77,8 @@ struct sharedData
     double costas_Ki = 0.001;
     double costas_phase = 0;
     double costas_freq = 0;
-    int rrc_span = 6;
     double rrc_alpha = 0.22;
+    int rrc_span = 6;
 
     sharedData(size_t rx_mtu) {
         imag_p_aft_cost.resize(rx_mtu, 0);
@@ -128,6 +129,8 @@ void run_backend(sharedData *sh_data, char *argv[]) {
             continue;
         }
 
+        if (sh_data->upsample_koef < 0) sh_data->upsample_koef = 1;
+
         sh_data->upsample_koef = std::max(sh_data->upsample_koef, 1);
         sh_data->rrc_span = std::max(sh_data->rrc_span, 1);
 
@@ -163,20 +166,29 @@ void run_backend(sharedData *sh_data, char *argv[]) {
 
         for (size_t i = 0; i < bits.size(); i++) bits[i] = rand() % 2;
 
-        rrc_impulse = rrc(sh_data->upsample_koef, sh_data->rrc_span, sh_data->rrc_alpha);
         modulate(bits, symbols, sh_data->modul_type_TX);
         UpSampler(symbols, symbols_ups, sh_data->upsample_koef);
+        
+        if (sh_data->rrc_filter) {
+            for (size_t i = 0; i < sdr.tx_mtu; i++) {
+                tx_buffer_double[2 * i] = (real(symbols_ups[i]));
+                tx_buffer_double[2 * i + 1] = (imag(symbols_ups[i]));
+            }
 
-        for (size_t i = 0; i < sdr.tx_mtu; i++) {
-            tx_buffer_double[2 * i] = (real(symbols_ups[i]));
-            tx_buffer_double[2 * i + 1] = (imag(symbols_ups[i]));
-        }
+            rrc_impulse = rrc(sh_data->upsample_koef, sh_data->rrc_span, sh_data->rrc_alpha);
+            filter_double(tx_buffer_double, rrc_impulse, tx_buffer_double_aft_rrc);
 
-        filter_double(tx_buffer_double, rrc_impulse, tx_buffer_double_aft_rrc);
+            for (size_t i = 0; i < sdr.tx_mtu; i++) {
+                sdr.tx_buffer[2 * i] = tx_buffer_double_aft_rrc[2 * i] * 16000;
+                sdr.tx_buffer[2 * i + 1] = tx_buffer_double_aft_rrc[2 * i + 1] * 16000;
+            }
+        } else {
+            filter(symbols_ups, impulse);
 
-        for (size_t i = 0; i < sdr.tx_mtu; i++) {
-            sdr.tx_buffer[2 * i] = tx_buffer_double_aft_rrc[2 * i] * 16000;
-            sdr.tx_buffer[2 * i + 1] = tx_buffer_double_aft_rrc[2 * i + 1] * 16000;
+            for (size_t i = 0; i < sdr.tx_mtu; i++) {
+                sdr.tx_buffer[2*i] = (real(symbols_ups[i]) * 16000);
+                sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
+            }
         }
 
         if (sh_data->changed_rx_gain) {
@@ -270,7 +282,10 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         }
 
         std::transform(sdr.rx_buffer.begin(), sdr.rx_buffer.end(), rx_buffer_double.begin(), [](int16_t v) { return static_cast<double>(v); });
-        filter_double(rx_buffer_double, rrc_impulse, rx_buffer_after_conv);
+
+        if (sh_data->rrc_filter) filter_double(rx_buffer_double, rrc_impulse, rx_buffer_after_conv);
+        else filter_double(rx_buffer_double, impulse_double, rx_buffer_after_conv);
+
         norm_max(rx_buffer_after_conv);
 
         for (size_t i = 0; i < sdr.rx_mtu; ++i) {
@@ -447,6 +462,7 @@ void run_gui(sharedData *sh_data) {
             if (ImGui::BeginTabItem("Config")) {
                 ImGui::SeparatorText("Pre Modulation");
                 const char* rx_mod_type = nullptr;
+                const char* filter_type = nullptr;
                 const char* tx_mod_type = nullptr;
                 const char* costas_lop_mode = nullptr;
 
@@ -461,11 +477,11 @@ void run_gui(sharedData *sh_data) {
                     case ModulationType::QAM16: tx_mod_type = "TX Modulation QAM16"; break;
                 }
 
-                if (sh_data->costas_loop_mode) {
-                    costas_lop_mode = "Costas Loop RX";
-                } else {
-                    costas_lop_mode = "Costas Loop TX";
-                }
+                if (sh_data->rrc_filter) filter_type = "RRC Impulse";
+                else filter_type = "Rectangle Impulse";
+
+                if (sh_data->costas_loop_mode) costas_lop_mode = "Costas Loop RX";
+                else costas_lop_mode = "Costas Loop TX";
 
                 if (ImGui::BeginCombo("RX Modulation Type", rx_mod_type)) {
                     if (ImGui::Selectable("BPSK", sh_data->modul_type_RX == ModulationType::BPSK)) sh_data->modul_type_RX = ModulationType::BPSK;
@@ -478,6 +494,12 @@ void run_gui(sharedData *sh_data) {
                     if (ImGui::Selectable("BPSK", sh_data->modul_type_TX == ModulationType::BPSK)) sh_data->modul_type_TX = ModulationType::BPSK;
                     if (ImGui::Selectable("QPSK", sh_data->modul_type_TX == ModulationType::QPSK)) sh_data->modul_type_TX = ModulationType::QPSK;
                     if (ImGui::Selectable("QAM16", sh_data->modul_type_TX == ModulationType::QAM16)) sh_data->modul_type_TX = ModulationType::QAM16;
+                    ImGui::EndCombo();
+                }
+
+                if (ImGui::BeginCombo("Filter Type", filter_type)) {
+                    if (ImGui::Selectable("RRC Impulse", sh_data->rrc_filter == true)) sh_data->rrc_filter = true;
+                    if (ImGui::Selectable("Rectangle Impulse", sh_data->rrc_filter == false)) sh_data->rrc_filter = false;
                     ImGui::EndCombo();
                 }
 

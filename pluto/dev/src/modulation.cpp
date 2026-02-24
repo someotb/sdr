@@ -104,7 +104,7 @@ void norm_max(std::vector<double>& rx) {
 }
 
 std::vector<double> rrc(int& sps, int& span, double& alpha) {
-    int N = span * sps + 1;
+    int N = span * sps - 1;
     std::vector<double> h(N);
 
     for (int n = 0; n < N; ++n) {
