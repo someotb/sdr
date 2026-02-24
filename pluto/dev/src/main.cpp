@@ -36,6 +36,8 @@ struct sharedData
     ModulationType modul_type_TX = ModulationType::QPSK;
     ModulationType modul_type_RX = ModulationType::QPSK;
     int upsample_koef = 10;
+    std::string device;
+    std::vector<std::string> devices;
     std::vector<double> real_p_aft_con;
     std::vector<double> imag_p_aft_con;
     std::vector<double> real_p_aft_gar;
@@ -96,8 +98,22 @@ struct sharedData
     }
 };
 
-void run_backend(sharedData *sh_data, char *argv[]) {
-    SDRDevice sdr(argv[1]);
+void run_backend(sharedData *sh_data) {
+    size_t length;
+    SoapySDRKwargs* results = SoapySDRDevice_enumerate(nullptr, &length);
+
+    sh_data->devices.clear();
+
+    for (size_t i = 0; i < length / 2; ++i) {
+        std::string label = static_cast<std::string>(results[i].vals[3]);
+        sh_data->devices.push_back(label);
+    }
+
+    if (!sh_data->devices.empty()) sh_data->device = sh_data->devices[0];
+
+    SoapySDRKwargsList_clear(results, length);
+
+    SDRDevice sdr(sh_data->device.c_str());
     CostasState costas;
     GardnerState gardner;
 
@@ -168,7 +184,7 @@ void run_backend(sharedData *sh_data, char *argv[]) {
 
         modulate(bits, symbols, sh_data->modul_type_TX);
         UpSampler(symbols, symbols_ups, sh_data->upsample_koef);
-        
+
         if (sh_data->rrc_filter) {
             for (size_t i = 0; i < sdr.tx_mtu; i++) {
                 tx_buffer_double[2 * i] = (real(symbols_ups[i]));
@@ -252,6 +268,15 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
         (void)sr;
 
+
+        long long tx_time = timeNs + TX_DELAY;
+        flags = SOAPY_SDR_HAS_TIME;
+
+        if (sh_data->send) {
+            int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
+            (void)st;
+        }
+
         for (size_t i = 0; i < sdr.rx_mtu; ++i) {
             in[i][0] = static_cast<double>(sdr.rx_buffer[2 * i] / 32768.0);
             in[i][1] = static_cast<double>(sdr.rx_buffer[2 * i + 1] / 32768.0);
@@ -271,14 +296,6 @@ void run_backend(sharedData *sh_data, char *argv[]) {
         for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
             sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
             sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
-        }
-
-        long long tx_time = timeNs + TX_DELAY;
-        flags = SOAPY_SDR_HAS_TIME;
-
-        if (sh_data->send) {
-            int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
-            (void)st;
         }
 
         std::transform(sdr.rx_buffer.begin(), sdr.rx_buffer.end(), rx_buffer_double.begin(), [](int16_t v) { return static_cast<double>(v); });
@@ -460,6 +477,14 @@ void run_gui(sharedData *sh_data) {
         ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
         if (ImGui::BeginTabBar("Control Panel")) {
             if (ImGui::BeginTabItem("Config")) {
+
+                ImGui::SeparatorText("Processing Blocks");
+                ImGui::Checkbox("Transmission", &sh_data->send);
+                ImGui::SameLine();
+                ImGui::Checkbox("Costas Loop", &sh_data->freq_sync);
+                ImGui::SameLine();
+                ImGui::Checkbox("Gardner", &sh_data->symb_sync);
+
                 ImGui::SeparatorText("Pre Modulation");
                 const char* rx_mod_type = nullptr;
                 const char* filter_type = nullptr;
@@ -506,7 +531,17 @@ void run_gui(sharedData *sh_data) {
                 ImGui::InputInt("Upsample Coefficient", &sh_data->upsample_koef, 1, 1e1);
 
                 ImGui::SeparatorText("SDR Configuration");
-                ImGui::Checkbox("Transmission(on/off)", &sh_data->send);
+
+                if (ImGui::BeginCombo("SDR Device", sh_data->device.c_str())) {
+                    for (const auto& dev : sh_data->devices) {
+                        bool is_selected = (sh_data->device == dev);
+                        if (ImGui::Selectable(dev.c_str(), is_selected)) sh_data->device = dev;
+                        if (is_selected) ImGui::SetItemDefaultFocus();
+                    }
+
+                    ImGui::EndCombo();
+                }
+
                 if (ImGui::DragFloat("RX Gain", &sh_data->rx_gain, 0.25f, 0.f, 73.f)){
                     sh_data->changed_rx_gain = true;
                 }
@@ -519,9 +554,6 @@ void run_gui(sharedData *sh_data) {
                 if (ImGui::InputDouble("TX Frequency", &sh_data->tx_frequency, 1e2, 1e3)) {
                     sh_data->changed_tx_freq = true;
                 }
-                if (ImGui::InputDouble("Sample Rate", &sh_data->sample_rate, 1e5, 1e6)) {
-                    sh_data->changed_sample_rate = true;
-                }
                 if (ImGui::SliderInt("RX Bandwidth", &cur_rx_bandwidth, 0, bandwidths.size() - 1, std::to_string(bandwidths[cur_rx_bandwidth]).c_str())) {
                     sh_data->rx_bandwidth = bandwidths[cur_rx_bandwidth];
                     sh_data->changed_rx_bandwidth = true;
@@ -530,9 +562,11 @@ void run_gui(sharedData *sh_data) {
                     sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];
                     sh_data->changed_tx_bandwidth = true;
                 }
+                if (ImGui::InputDouble("Sample Rate", &sh_data->sample_rate, 1e5, 1e6)) {
+                    sh_data->changed_sample_rate = true;
+                }
 
                 ImGui::SeparatorText("Costas Loop Configuration");
-                ImGui::Checkbox("Costas Loop(on/off)", &sh_data->freq_sync);
                 ImGui::InputDouble("Costas Kp Value", &sh_data->costas_Kp, 0.01, 0.1);
                 ImGui::InputDouble("Costas Ki Value", &sh_data->costas_Ki, 0.001, 0.01);
                 if (ImGui::BeginCombo("Costas Loop Mode", costas_lop_mode)) {
@@ -545,7 +579,6 @@ void run_gui(sharedData *sh_data) {
                 }
 
                 ImGui::SeparatorText("Gardner Configuration");
-                ImGui::Checkbox("Gardner(on/off)", &sh_data->symb_sync);
                 ImGui::InputDouble("Gardner BnTs Value", &sh_data->gardner_BnTs, 1e-1, 1e-2);
                 ImGui::InputDouble("Gardner Kp Value", &sh_data->gardner_Kp, 1e-1, 1e-2);
 
@@ -598,12 +631,11 @@ void run_gui(sharedData *sh_data) {
     SDL_Quit();
 }
 
-int main(int argc, char *argv[]) {
-    (void) argc;
+int main() {
     sharedData sd(1920);
 
     std::thread gui_thread(run_gui, &sd);
-    std::thread backend_thread(run_backend, &sd, argv);
+    std::thread backend_thread(run_backend, &sd);
 
     backend_thread.join();
     gui_thread.join();

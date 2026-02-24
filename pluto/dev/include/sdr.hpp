@@ -21,7 +21,7 @@ public:
     std::vector<int16_t> rx_buffer;
     std::vector<int16_t> tx_buffer;
 
-    SDRDevice(char* usb): sdr(nullptr), rxStream(nullptr), txStream(nullptr) {
+    SDRDevice(const char* usb): sdr(nullptr), rxStream(nullptr), txStream(nullptr) {
         SoapySDRKwargs args = {};
         SoapySDRKwargs_set(&args, "driver", "plutosdr");
         SoapySDRKwargs_set(&args, "uri", usb);
