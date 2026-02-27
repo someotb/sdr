@@ -202,8 +202,8 @@ void run_backend(sharedData *sh_data) {
             filter(symbols_ups, impulse);
 
             for (size_t i = 0; i < sdr.tx_mtu; i++) {
-                sdr.tx_buffer[2*i] = (real(symbols_ups[i]) * 16000);
-                sdr.tx_buffer[2*i+1] = (imag(symbols_ups[i]) * 16000);
+                sdr.tx_buffer[2 * i] = (real(symbols_ups[i]) * 16000);
+                sdr.tx_buffer[2 * i + 1] = (imag(symbols_ups[i]) * 16000);
             }
         }
 
