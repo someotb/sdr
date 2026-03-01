@@ -88,6 +88,18 @@ void ifft(fftw_complex* in, fftw_complex* out, int N) {
     fftw_destroy_plan(plan);
 }
 
+void build_pss_symbol(fftw_complex* in, fftw_complex* out, int subcarrier) {
+     if (subcarrier <= 0) throw std::invalid_argument("subcarrier must be positive");
+
+     for (int i = 0; i < subcarrier; ++i) {
+         double value = ((i % 2) == 0) ? 1.0 : -1.0;
+         in[i][0] = value;
+         in[i][1] = 0.0;
+     }
+
+     ifft(in, out, subcarrier);
+}
+
 void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex* out, ModulationType mod, int subcarrier) {
     size_t needed = subcarrier * bits_per_symbol(mod);
 

@@ -52,6 +52,8 @@ void fft(fftw_complex* in, fftw_complex* out, int N);
 
 void ifft(fftw_complex* in, fftw_complex* out, int N);
 
+void build_pss_symbol(fftw_complex* in, fftw_complex* out, int subcarrier);
+
 void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex* out, ModulationType mod, int subcarrier);
 
 void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, int cyclic_prefex);

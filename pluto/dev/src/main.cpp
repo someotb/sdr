@@ -32,7 +32,6 @@ struct sharedData
 {
     ModulationType modul_type_TX = ModulationType::QPSK;
     ModulationType modul_type_RX = ModulationType::QPSK;
-    int upsample_koef = 10;
     std::string device;
     std::vector<std::string> devices;
     std::vector<double> real_p;
@@ -40,8 +39,8 @@ struct sharedData
     std::vector<double> shifted_magnitude;
     std::vector<double> argument;
     std::vector<double> frequency_axis;
-    bool send = false;
-    bool quit = false;
+    bool changed_send = false;
+    bool changed_quit = false;
     bool changed_rx_gain = false;
     bool changed_tx_gain = false;
     bool changed_rx_freq = false;
@@ -50,7 +49,8 @@ struct sharedData
     bool changed_rx_bandwidth = false;
     bool changed_tx_bandwidth = false;
     bool changed_modulation_type = false;
-    bool cont_time = true;
+    bool changed_pss_symbols = false;
+    bool changed_cont_time = true;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
     double rx_frequency = 777e6;
@@ -58,8 +58,8 @@ struct sharedData
     double sample_rate = 1.92e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
-    int CYCLIC_PREFEX = 8;
-    int SUBCARRIER = 128;
+    int cyclic_prefex = 8;
+    int subcarrier = 128;
 
     sharedData(size_t rx_mtu) {
         real_p.resize(rx_mtu, 0);
@@ -105,27 +105,32 @@ void run_backend(sharedData *sh_data) {
     while (bit_fifo.size() < 100000)
         bit_fifo.push_back(rand() & 1);
 
-    while (sh_data->quit == false) {
-        if (!sh_data->cont_time) {
+    while (sh_data->changed_quit == false) {
+        if (!sh_data->changed_cont_time) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             continue;
         }
 
-        if (sh_data->SUBCARRIER != current_subcarriers) {
+        if (sh_data->subcarrier != current_subcarriers) {
             if (in) fftw_free(in);
             if (out) fftw_free(out);
 
-            in = reinterpret_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * sh_data->SUBCARRIER));
-            out = reinterpret_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * sh_data->SUBCARRIER));
-            current_subcarriers = sh_data->SUBCARRIER;
+            in = reinterpret_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
+            out = reinterpret_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
+            current_subcarriers = sh_data->subcarrier;
         }
 
         sdr.tx_buffer.clear();
         sdr.tx_buffer.reserve(2 * sdr.tx_mtu);
 
+        if (sh_data->changed_pss_symbols) {
+            build_pss_symbol(in, out, sh_data->subcarrier);
+            append_symbol(out, sdr.tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex);
+        }
+
         while (sdr.tx_buffer.size() < 2 * sdr.tx_mtu) {
-            build_ofdm_symbol(bit_fifo, in, out, sh_data->modul_type_TX, sh_data->SUBCARRIER);
-            append_symbol(out, sdr.tx_buffer, sh_data->SUBCARRIER, sh_data->CYCLIC_PREFEX);
+            build_ofdm_symbol(bit_fifo, in, out, sh_data->modul_type_TX, sh_data->subcarrier);
+            append_symbol(out, sdr.tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex);
         }
 
         void *rx_buffs[] = {sdr.rx_buffer.data()};
@@ -141,7 +146,7 @@ void run_backend(sharedData *sh_data) {
         long long tx_time = timeNs + TX_DELAY;
         flags = SOAPY_SDR_HAS_TIME;
 
-        if (sh_data->send) {
+        if (sh_data->changed_send) {
             int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
             (void)st;
         }
@@ -324,7 +329,8 @@ void run_gui(sharedData *sh_data) {
             if (ImGui::BeginTabItem("Config")) {
 
                 ImGui::SeparatorText("Processing Blocks");
-                ImGui::Checkbox("Transmission", &sh_data->send);
+                ImGui::Checkbox("Transmission", &sh_data->changed_send);
+                ImGui::Checkbox("PSS Symbols", &sh_data->changed_pss_symbols);
 
                 ImGui::SeparatorText("Pre Modulation");
                 const char* rx_mod_type = nullptr;
@@ -355,9 +361,8 @@ void run_gui(sharedData *sh_data) {
                     ImGui::EndCombo();
                 }
 
-                ImGui::InputInt("Upsample Coefficient", &sh_data->upsample_koef, 1, 1e1);
-                ImGui::InputInt("Cycle Prefix", &sh_data->CYCLIC_PREFEX, 1);
-                ImGui::InputInt("Subcarrier", &sh_data->SUBCARRIER, 1);
+                ImGui::InputInt("Cycle Prefix", &sh_data->cyclic_prefex, 1);
+                ImGui::InputInt("Subcarrier", &sh_data->subcarrier, 1);
 
                 ImGui::SeparatorText("SDR Configuration");
 
@@ -395,10 +400,10 @@ void run_gui(sharedData *sh_data) {
                 }
 
                 ImGui::SeparatorText("Time Control");
-                const char* label_time = sh_data->cont_time ? "Running" : "Stopped";
+                const char* label_time = sh_data->changed_cont_time ? "Running" : "Stopped";
 
                 if (ImGui::Button(label_time)) {
-                    sh_data->cont_time = !sh_data->cont_time;
+                    sh_data->changed_cont_time = !sh_data->changed_cont_time;
                 }
                 ImGui::EndTabItem();
             }
@@ -424,7 +429,7 @@ void run_gui(sharedData *sh_data) {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);
     }
-    sh_data->quit = true;
+    sh_data->changed_quit = true;
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImPlot::DestroyContext();
