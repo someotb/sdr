@@ -57,25 +57,3 @@ void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex
 void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, int cyclic_prefex);
 
 int bits_per_symbol(ModulationType type);
-
-void filter_double(std::vector<double>& in, std::vector<double>& h, std::vector<double>& out);
-
-void norm_max(std::vector<double>& rx);
-
-std::vector<double> rrc(int& sps, int& span, double& alpha);
-
-struct GardnerState {
-    void gather(std::vector<double>& real_p, std::vector<double>& imag_p, std::vector<std::complex<double>>& gather);
-    std::vector<std::complex<double>> gardnerr(std::vector<std::complex<double>>& input, double& BnTs, int& SPS, double& Kp);
-};
-
-struct CostasState {
-    double phase = 0.0;
-    double freq = 0.0;
-
-    void costas_step(double& I_orig, double& Q_orig, double& I_new, double& Q_new, double& Kp, double& Ki, ModulationType& mod_type);
-    double get_phase();
-    double get_freq();
-    double QAM16slicer(double x);
-    void reset_costas_state();
-};

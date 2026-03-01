@@ -95,7 +95,6 @@ void run_backend(sharedData *sh_data) {
     }
 
     std::deque<int> bit_fifo;
-    std::vector<double> tx_buffer_double(2 * sdr.tx_mtu, 0);
     std::vector<double> rx_buffer_double(2 * sdr.rx_mtu, 0);
     std::vector<double> magnitude(sdr.rx_mtu, 0);
 
@@ -124,8 +123,7 @@ void run_backend(sharedData *sh_data) {
         sdr.tx_buffer.clear();
         sdr.tx_buffer.reserve(2 * sdr.tx_mtu);
 
-        while (sdr.tx_buffer.size() < 2 * sdr.tx_mtu)
-        {
+        while (sdr.tx_buffer.size() < 2 * sdr.tx_mtu) {
             build_ofdm_symbol(bit_fifo, in, out, sh_data->modul_type_TX, sh_data->SUBCARRIER);
             append_symbol(out, sdr.tx_buffer, sh_data->SUBCARRIER, sh_data->CYCLIC_PREFEX);
         }
@@ -208,24 +206,24 @@ void run_backend(sharedData *sh_data) {
             sh_data->imag_p[i] = rx_buffer_double[i * 2 + 1];
         }
 
-        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-        //     in1[i][0] = static_cast<double>(sdr.rx_buffer[2 * i] / 32768.0);
-        //     in1[i][1] = static_cast<double>(sdr.rx_buffer[2 * i + 1] / 32768.0);
-        // }
+        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+            in1[i][0] = static_cast<double>(sdr.rx_buffer[2 * i] / 32768.0);
+            in1[i][1] = static_cast<double>(sdr.rx_buffer[2 * i + 1] / 32768.0);
+        }
 
-        // fft(in1, out1, sdr.rx_mtu);
+        fft(in1, out1, sdr.rx_mtu);
 
-        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-        //     double real = out1[i][0];
-        //     double imag = out1[i][1];
-        //     magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / sdr.rx_mtu) + 1e-12;
-        //     sh_data->argument[i] = atan2(imag, real);
-        // }
+        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+            double real = out1[i][0];
+            double imag = out1[i][1];
+            magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / sdr.rx_mtu) + 1e-12;
+            sh_data->argument[i] = atan2(imag, real);
+        }
 
-        // for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
-        //     sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
-        //     sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
-        // }
+        for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
+            sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
+            sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
+        }
     }
     std::cout << "[TX] " << "Transmission complited\n";
     fftw_free(in);
