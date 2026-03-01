@@ -2,7 +2,6 @@
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Types.h>
 #include <algorithm>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <stdio.h>
@@ -120,8 +119,7 @@ void run_backend(sharedData *sh_data) {
             current_subcarriers = sh_data->subcarrier;
         }
 
-        sdr.tx_buffer.clear();
-        sdr.tx_buffer.reserve(2 * sdr.tx_mtu);
+        // sdr.tx_buffer.reserve(2 * sdr.tx_mtu);
 
         if (sh_data->changed_pss_symbols) {
             build_pss_symbol(in, out, sh_data->subcarrier);
@@ -150,6 +148,14 @@ void run_backend(sharedData *sh_data) {
             int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
             (void)st;
         }
+
+        std::vector<int16_t> tail;
+        tail.reserve(sdr.rx_buffer.size() - sdr.tx_mtu);
+        for (size_t i = sdr.tx_mtu * 2; i < sdr.rx_buffer.size(); ++i) {
+            tail.push_back(sdr.tx_buffer[i]);
+        }
+        sdr.tx_buffer.swap(tail);
+
 
         if (sh_data->changed_rx_gain) {
             if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_gain))) != 0) {
