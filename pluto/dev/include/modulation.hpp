@@ -2,7 +2,9 @@
 
 #include <vector>
 #include <complex>
+#include <deque>
 #include <cstdint>
+#include <fftw3.h>
 #include <cmath>
 
 enum class ModulationType {
@@ -19,7 +21,7 @@ enum class ModulationType {
  * @param modulation_type Type of modulation to use
  */
 
-void modulate(const std::vector<int16_t>& bits, std::vector<std::complex<double>>& symbols, ModulationType modulation_type);
+std::complex<double> map_symbol(std::deque<int>& fifo, ModulationType mod);
 
  /**
   * @brief Upsample function
@@ -45,6 +47,14 @@ void filter(std::vector<std::complex<double>>& symbols_ups, const std::vector<st
   *
   * @param type Type of modulation
   */
+
+void fft(fftw_complex* in, fftw_complex* out, int N);
+
+void ifft(fftw_complex* in, fftw_complex* out, int N);
+
+void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex* out, ModulationType mod, int subcarrier);
+
+void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, int cyclic_prefex);
 
 int bits_per_symbol(ModulationType type);
 
