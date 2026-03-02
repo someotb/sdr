@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <vector>
 #include <algorithm>
+#include <iostream>
 
 // According to 3GPP TS 38.211 section 5.1.3:
 std::complex<double> map_symbol(std::deque<int>& fifo, ModulationType mod) {
@@ -90,8 +91,9 @@ void ifft(fftw_complex* in, fftw_complex* out, int N) {
 void build_pss_symbol(fftw_complex* in, fftw_complex* out, int subcarrier) {
      if (subcarrier <= 0) throw std::invalid_argument("subcarrier must be positive");
 
-     for (int i = 0; i < subcarrier; ++i) {
-         double value = ((i % 2) == 0) ? 1.0 : -1.0;
+     for (int i = 1; i < subcarrier; ++i) {
+         if (i == subcarrier / 2) continue;
+         double value = ((i % 2) == 0) ? 1.0 : 0.0;
          in[i][0] = value;
          in[i][1] = 0.0;
      }
@@ -137,4 +139,38 @@ int bits_per_symbol(ModulationType type) {
         case ModulationType::QAM16: return 4;
         default: throw std::invalid_argument("Unsapported modulation type");
     }
+}
+
+schmiddle_state schmidl_sync(std::vector<double> rx, int subcarriers) {
+    if (rx.size() == 0) return schmiddle_state{};
+
+    schmiddle_state sch_s;
+    std::vector<std::complex<double>> signal;
+    double max_M = 0;
+    int best_pos = 0;
+    std::vector<double> M;
+    std::complex<double> P = 0;
+    std::complex<double> R = 0;
+
+    for (size_t i = 0; i < rx.size() / 2; ++i)
+        signal.push_back(std::complex<double>(rx[2 * i], rx[2 * i + 1]));
+
+    for (size_t n = 0; n < signal.size() - subcarriers - 1; ++n) {
+        for (int k = 0; k < subcarriers / 2; ++k) {
+            P += std::conj(signal[n + k]) * signal[n + k + subcarriers / 2];
+            R += std::norm(signal[n + k + subcarriers / 2]);
+        }
+
+        M.push_back(static_cast<double>(std::norm(P) / std::norm(R)));
+        if (M.back() > max_M) {
+            max_M = M.back();
+            sch_s.M = n;
+        }
+
+        sch_s.M_arr = M;
+        std::cout << "M: " << max_M << "\n" << "M Array: " << sch_s.M_arr.size() << "\n";
+
+        if (M.size() > 1920) M.clear();
+    }
+    return sch_s;
 }

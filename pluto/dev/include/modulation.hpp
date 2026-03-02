@@ -13,6 +13,11 @@ enum class ModulationType {
     QAM16
 };
 
+struct schmiddle_state {
+    int M = 0;
+    std::vector<double> M_arr;
+};
+
 /**
  * @brief Modulation mapper according to 3GPP TS 38.211 specification
  *
@@ -59,3 +64,5 @@ void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex
 void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, int cyclic_prefex);
 
 int bits_per_symbol(ModulationType type);
+
+schmiddle_state schmidl_sync(std::vector<double> rx, int subcarriers);
