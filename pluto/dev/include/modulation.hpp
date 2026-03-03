@@ -65,4 +65,6 @@ void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, 
 
 int bits_per_symbol(ModulationType type);
 
-schmiddle_state schmidl_sync(std::vector<double> rx, int subcarriers);
+schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subcarriers);
+
+void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar, std::vector<double> &real, std::vector<double> &imag);

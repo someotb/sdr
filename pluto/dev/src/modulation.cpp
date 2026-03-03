@@ -141,19 +141,14 @@ int bits_per_symbol(ModulationType type) {
     }
 }
 
-schmiddle_state schmidl_sync(std::vector<double> rx, int subcarriers) {
-    if (rx.size() == 0) return schmiddle_state{};
+schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subcarriers) {
+    if (signal.size() == 0) return schmiddle_state{};
 
     schmiddle_state sch_s;
-    std::vector<std::complex<double>> signal;
     double max_M = 0;
-    int best_pos = 0;
     std::vector<double> M;
     std::complex<double> P = 0;
     std::complex<double> R = 0;
-
-    for (size_t i = 0; i < rx.size() / 2; ++i)
-        signal.push_back(std::complex<double>(rx[2 * i], rx[2 * i + 1]));
 
     for (size_t n = 0; n < signal.size() - subcarriers - 1; ++n) {
         for (int k = 0; k < subcarriers / 2; ++k) {
@@ -168,9 +163,30 @@ schmiddle_state schmidl_sync(std::vector<double> rx, int subcarriers) {
         }
 
         sch_s.M_arr = M;
-        std::cout << "M: " << max_M << "\n" << "M Array: " << sch_s.M_arr.size() << "\n";
 
         if (M.size() > 1920) M.clear();
     }
     return sch_s;
+}
+
+void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar, std::vector<double>& real, std::vector<double>& imag) {
+    fftw_complex* in_fft = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * subcarrar));
+    fftw_complex* out_fft = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * subcarrar));
+
+    std::vector<std::complex<double>> tmp;
+    for (size_t i = 0; i < signal.size(); i += cp + subcarrar) {
+        tmp.insert(tmp.begin(), signal.begin() + cp + i, signal.begin() + cp + subcarrar + i);
+        for (int j = 0; j < subcarrar; ++j) {
+            in_fft[j][0] = std::real(tmp[j]);
+            in_fft[j][1] = std::imag(tmp[j]);
+        }
+        fft(in_fft, out_fft, subcarrar);
+        for (int k = 0; k < subcarrar; ++k) {
+            real[k + i] = out_fft[k][0];
+            imag[k + i] = out_fft[k][1];
+        }    
+    }
+    tmp.clear();
+    fftw_free(in_fft);
+    fftw_free(out_fft);
 }

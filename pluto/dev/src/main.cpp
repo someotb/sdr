@@ -53,6 +53,7 @@ struct sharedData
     bool changed_modulation_type = false;
     bool changed_pss_symbols = false;
     bool changed_cont_time = true;
+    bool get_schmiddle_pos = false;
     bool schmiddle_sync = false;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
@@ -78,6 +79,7 @@ struct sharedData
 };
 
 void run_backend(sharedData *sh_data) {
+    schmiddle_state schm_state;
     size_t length;
     SoapySDRKwargs* results = SoapySDRDevice_enumerate(nullptr, &length);
 
@@ -100,9 +102,6 @@ void run_backend(sharedData *sh_data) {
     fftw_complex* in_spectre = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu));
     fftw_complex* out_spectre = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu));
 
-    fftw_complex* in_fft = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
-    fftw_complex* out_fft = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
-
     for (size_t i = 0; i < sdr.rx_mtu; ++i) {
         sh_data->frequency_axis[i] = (i - sdr.rx_mtu / 2.0) * sh_data->sample_rate / sdr.rx_mtu;
     }
@@ -110,6 +109,7 @@ void run_backend(sharedData *sh_data) {
     std::deque<int> bit_fifo;
     std::vector<double> rx_buffer_double(2 * sdr.rx_mtu, 0);
     std::vector<double> magnitude(sdr.rx_mtu, 0);
+    std::vector<std::complex<double>> rx_complex(sdr.rx_mtu, 0);
 
     while (bit_fifo.size() < 100000)
         bit_fifo.push_back(rand() & 1);
@@ -201,67 +201,51 @@ void run_backend(sharedData *sh_data) {
             sh_data->changed_tx_bandwidth = false;
         }
 
-        std::transform(sdr.rx_buffer.begin(), sdr.rx_buffer.end(), rx_buffer_double.begin(), [](int16_t v) { return static_cast<double>(v); });
-
         for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-            sh_data->real_p[i] = rx_buffer_double[i * 2];
-            sh_data->imag_p[i] = rx_buffer_double[i * 2 + 1];
+            rx_complex[i] = std::complex<double>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
         }
 
-        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-            in_spectre[i][0] = rx_buffer_double[2 * i] / 32768.0;
-            in_spectre[i][1] = rx_buffer_double[2 * i + 1] / 32768.0;
-        }
+        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+            // in_spectre[i][0] = rx_buffer_double[2 * i] / 32768.0;
+        //     in_spectre[i][1] = rx_buffer_double[2 * i + 1] / 32768.0;
+        // }
 
-        fft(in_spectre, out_spectre, sdr.rx_mtu);
+        // fft(in_spectre, out_spectre, sdr.rx_mtu);
 
-        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-            double real = out_spectre[i][0];
-            double imag = out_spectre[i][1];
-            magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / sdr.rx_mtu) + 1e-12;
-            sh_data->argument[i] = atan2(imag, real);
-        }
+        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+        //     double real = out_spectre[i][0];
+        //     double imag = out_spectre[i][1];
+        //     magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / sdr.rx_mtu) + 1e-12;
+        //     sh_data->argument[i] = atan2(imag, real);
+        // }
 
-        for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
-            sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
-            sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
-        }
+        // for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
+        //     sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
+        //     sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
+        // }
 
-        schmiddle_state schm_state;
-
-        if (sh_data->schmiddle_sync) {
-            schm_state = schmidl_sync(rx_buffer_double, sh_data->subcarrier);
+        if (sh_data->get_schmiddle_pos) {
+            schm_state = schmidl_sync(rx_complex, sh_data->subcarrier);
             sh_data->sync_pos = schm_state.M;
             sh_data->M_arra = schm_state.M_arr;
-            std::cout << "M: " << schm_state.M << "\n" << "M Array: " << schm_state.M_arr.size() << "\n";
-            sh_data->schmiddle_sync = false;
+            sh_data->get_schmiddle_pos = false;
         }
 
-        for (size_t i = 0; i < sdr.rx_mtu / sh_data->subcarrier; ++i) {
-            for (int j = 0; j < sh_data->subcarrier; ++j) {
-                // std::cout << "i: " << i << " | j: " << j << "\n";
-                // std::cout << "in_fft index: " << i * sh_data->subcarrier + j << "\n";
-                // std::cout << "sdr.rx_buffer index(real): " << 2 * (i * sh_data->subcarrier + j) << "\n";
-                // std::cout << "sdr.rx_buffer index(imag): " << 2 * (i * sh_data->subcarrier + j) + 1 << "\n";
-
-                in_fft[j][0] = rx_buffer_double[2 * (i * sh_data->subcarrier + j)];
-                in_fft[j][1] = rx_buffer_double[2 * (i * sh_data->subcarrier + j) + 1];
-            }
-            fft(in_fft, out_fft, sh_data->subcarrier);
-            for (int k = 0; k < sh_data->subcarrier; ++k) {
-                // std::cout << "out_fft[" << k << "][0]:" << out_fft[k][0] << "\n";
-                // std::cout << "out_fft[" << k << "][1]:" << out_fft[k][1] << "\n";
-                sh_data->real_p_fft[k] = out_fft[k][0];
-                sh_data->imag_p_fft[k] = out_fft[k][1];
-            }
+        if (sh_data->schmiddle_sync) {
+            rx_complex.erase(rx_complex.begin(), rx_complex.begin() + (schm_state.M + sh_data->subcarrier));
+            rx_complex.resize(sdr.rx_mtu, 0);
+            remove_cp(rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->real_p_fft, sh_data->imag_p_fft);
+        }
+        
+        for (size_t i = 0; i < rx_complex.size(); ++i) {
+            sh_data->real_p[i] = std::real(rx_complex[i]);
+            sh_data->imag_p[i] = std::imag(rx_complex[i]);
         }
     }
     fftw_free(in_build_ofdm);
     fftw_free(out_build_ofdm);
     fftw_free(in_spectre);
     fftw_free(out_spectre);
-    fftw_free(in_fft);
-    fftw_free(out_fft);
 }
 
 void run_gui(sharedData *sh_data) {
@@ -370,10 +354,21 @@ void run_gui(sharedData *sh_data) {
             if (ImGui::BeginTabItem("Config")) {
 
                 ImGui::SeparatorText("Processing Blocks");
-                ImGui::Checkbox("Transmission", &sh_data->changed_send);
+
+                const char* label_time = sh_data->changed_cont_time ? "Running" : "Stopped";
+                if (ImGui::Button(label_time)) sh_data->changed_cont_time = !sh_data->changed_cont_time;
+                
+                ImGui::SameLine();
+                
+                const char* mode = sh_data->changed_send ? "Transmission" : "Receiving";
+                if (ImGui::Button(mode)) sh_data->changed_send = !sh_data->changed_send;
+             
                 ImGui::Checkbox("PSS Symbols", &sh_data->changed_pss_symbols);
-                ImGui::Checkbox("Schmiddle Sync", &sh_data->schmiddle_sync);
-                ImGui::Text("Sync Position: %d", sh_data->sync_pos);
+                ImGui::SeparatorText("Schmiddle Cox");
+                if (ImGui::Button("Get Schmiddle Sync Pos")) sh_data->get_schmiddle_pos = true;
+                ImGui::SameLine();
+                ImGui::Text(": %d", sh_data->sync_pos);
+                ImGui::Checkbox("Schmiddle Cox Sync", &sh_data->schmiddle_sync);
 
                 ImGui::SeparatorText("Pre Modulation");
                 const char* rx_mod_type = nullptr;
@@ -440,13 +435,6 @@ void run_gui(sharedData *sh_data) {
                 }
                 if (ImGui::InputDouble("Sample Rate", &sh_data->sample_rate, 1e5, 1e6)) {
                     sh_data->changed_sample_rate = true;
-                }
-
-                ImGui::SeparatorText("Time Control");
-                const char* label_time = sh_data->changed_cont_time ? "Running" : "Stopped";
-
-                if (ImGui::Button(label_time)) {
-                    sh_data->changed_cont_time = !sh_data->changed_cont_time;
                 }
                 ImGui::EndTabItem();
             }
