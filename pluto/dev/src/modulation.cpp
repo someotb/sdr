@@ -173,20 +173,22 @@ void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar,
     fftw_complex* in_fft = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * subcarrar));
     fftw_complex* out_fft = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * subcarrar));
 
+    int offset = 0;
     std::vector<std::complex<double>> tmp;
-    for (size_t i = 0; i < signal.size(); i += cp + subcarrar) {
-        tmp.insert(tmp.begin(), signal.begin() + cp + i, signal.begin() + cp + subcarrar + i);
+    for (size_t i = 1; i <= signal.size() / (cp + subcarrar); ++i) {
+        offset += cp + subcarrar;
+        std::cout << "offset: " << offset << "\n";
+        tmp.insert(tmp.begin(), signal.begin() + offset - subcarrar, signal.begin() + offset);
         for (int j = 0; j < subcarrar; ++j) {
             in_fft[j][0] = std::real(tmp[j]);
             in_fft[j][1] = std::imag(tmp[j]);
         }
         fft(in_fft, out_fft, subcarrar);
         for (int k = 0; k < subcarrar; ++k) {
-            real[k + i] = out_fft[k][0];
-            imag[k + i] = out_fft[k][1];
-        }    
+            real[k + offset] = out_fft[k][0];
+            imag[k + offset] = out_fft[k][1];
+        }
     }
-    tmp.clear();
     fftw_free(in_fft);
     fftw_free(out_fft);
 }

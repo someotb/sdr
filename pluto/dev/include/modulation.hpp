@@ -67,4 +67,4 @@ int bits_per_symbol(ModulationType type);
 
 schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subcarriers);
 
-void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar, std::vector<double> &real, std::vector<double> &imag);
+void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar, std::vector<double>& real, std::vector<double>& imag);

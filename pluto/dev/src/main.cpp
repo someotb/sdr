@@ -2,6 +2,7 @@
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Types.h>
 #include <algorithm>
+#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <stdio.h>
@@ -205,24 +206,24 @@ void run_backend(sharedData *sh_data) {
             rx_complex[i] = std::complex<double>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
         }
 
-        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-            // in_spectre[i][0] = rx_buffer_double[2 * i] / 32768.0;
-        //     in_spectre[i][1] = rx_buffer_double[2 * i + 1] / 32768.0;
-        // }
+        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+            in_spectre[i][0] = std::real(rx_complex[i]) / 32768.0;
+            in_spectre[i][1] = std::imag(rx_complex[i]) / 32768.0;
+        }
 
-        // fft(in_spectre, out_spectre, sdr.rx_mtu);
+        fft(in_spectre, out_spectre, sdr.rx_mtu);
 
-        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-        //     double real = out_spectre[i][0];
-        //     double imag = out_spectre[i][1];
-        //     magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / sdr.rx_mtu) + 1e-12;
-        //     sh_data->argument[i] = atan2(imag, real);
-        // }
+        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+            double real = out_spectre[i][0];
+            double imag = out_spectre[i][1];
+            magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / sdr.rx_mtu) + 1e-12;
+            sh_data->argument[i] = atan2(imag, real);
+        }
 
-        // for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
-        //     sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
-        //     sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
-        // }
+        for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
+            sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
+            sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
+        }
 
         if (sh_data->get_schmiddle_pos) {
             schm_state = schmidl_sync(rx_complex, sh_data->subcarrier);
@@ -236,7 +237,7 @@ void run_backend(sharedData *sh_data) {
             rx_complex.resize(sdr.rx_mtu, 0);
             remove_cp(rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->real_p_fft, sh_data->imag_p_fft);
         }
-        
+
         for (size_t i = 0; i < rx_complex.size(); ++i) {
             sh_data->real_p[i] = std::real(rx_complex[i]);
             sh_data->imag_p[i] = std::imag(rx_complex[i]);
@@ -334,18 +335,18 @@ void run_gui(sharedData *sh_data) {
                     ImPlot::EndPlot();
                 }
             ImGui::EndChild();
-            ImGui::BeginChild("M Array", ImVec2(size.x, quoter_h), true);
-                if (ImPlot::BeginPlot("M Array")) {
-                    ImPlot::PlotLine("M Array", sh_data->M_arra.data(), sh_data->M_arra.size());
-                    ImPlot::EndPlot();
-                }
-            ImGui::EndChild();
-            // ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
-            //     if (ImPlot::BeginPlot("Magnitude")) {
-            //         ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
+            // ImGui::BeginChild("M Array", ImVec2(size.x, quoter_h), true);
+            //     if (ImPlot::BeginPlot("M Array")) {
+            //         ImPlot::PlotLine("M Array", sh_data->M_arra.data(), sh_data->M_arra.size());
             //         ImPlot::EndPlot();
             //     }
             // ImGui::EndChild();
+            ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
+                if (ImPlot::BeginPlot("Magnitude")) {
+                    ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
+                    ImPlot::EndPlot();
+                }
+            ImGui::EndChild();
         ImGui::End();
 
         ImGui::Begin("Settings");
@@ -357,12 +358,12 @@ void run_gui(sharedData *sh_data) {
 
                 const char* label_time = sh_data->changed_cont_time ? "Running" : "Stopped";
                 if (ImGui::Button(label_time)) sh_data->changed_cont_time = !sh_data->changed_cont_time;
-                
+
                 ImGui::SameLine();
-                
+
                 const char* mode = sh_data->changed_send ? "Transmission" : "Receiving";
                 if (ImGui::Button(mode)) sh_data->changed_send = !sh_data->changed_send;
-             
+
                 ImGui::Checkbox("PSS Symbols", &sh_data->changed_pss_symbols);
                 ImGui::SeparatorText("Schmiddle Cox");
                 if (ImGui::Button("Get Schmiddle Sync Pos")) sh_data->get_schmiddle_pos = true;
