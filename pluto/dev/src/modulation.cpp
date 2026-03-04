@@ -177,7 +177,6 @@ void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar,
     std::vector<std::complex<double>> tmp;
     for (size_t i = 1; i <= signal.size() / (cp + subcarrar); ++i) {
         offset += cp + subcarrar;
-        std::cout << "offset: " << offset << "\n";
         tmp.insert(tmp.begin(), signal.begin() + offset - subcarrar, signal.begin() + offset);
         for (int j = 0; j < subcarrar; ++j) {
             in_fft[j][0] = std::real(tmp[j]);
@@ -185,8 +184,8 @@ void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar,
         }
         fft(in_fft, out_fft, subcarrar);
         for (int k = 0; k < subcarrar; ++k) {
-            real[k + offset] = out_fft[k][0];
-            imag[k + offset] = out_fft[k][1];
+            real[(i - 1) * subcarrar + k] = out_fft[k][0];
+            imag[(i - 1) * subcarrar + k] = out_fft[k][1];
         }
     }
     fftw_free(in_fft);

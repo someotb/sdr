@@ -69,8 +69,8 @@ struct sharedData
 
     sharedData(size_t rx_mtu, int subcarriers) {
         M_arra.resize(rx_mtu, 0);
-        real_p_fft.resize(subcarriers, 0);
-        imag_p_fft.resize(subcarriers, 0);
+        real_p_fft.resize(rx_mtu, 0);
+        imag_p_fft.resize(rx_mtu, 0);
         real_p.resize(rx_mtu, 0);
         imag_p.resize(rx_mtu, 0);
         shifted_magnitude.resize(rx_mtu, 0);
@@ -335,18 +335,18 @@ void run_gui(sharedData *sh_data) {
                     ImPlot::EndPlot();
                 }
             ImGui::EndChild();
-            // ImGui::BeginChild("M Array", ImVec2(size.x, quoter_h), true);
-            //     if (ImPlot::BeginPlot("M Array")) {
-            //         ImPlot::PlotLine("M Array", sh_data->M_arra.data(), sh_data->M_arra.size());
-            //         ImPlot::EndPlot();
-            //     }
-            // ImGui::EndChild();
-            ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
-                if (ImPlot::BeginPlot("Magnitude")) {
-                    ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
+            ImGui::BeginChild("M Array", ImVec2(size.x, quoter_h), true);
+                if (ImPlot::BeginPlot("M Array")) {
+                    ImPlot::PlotLine("M Array", sh_data->M_arra.data(), sh_data->M_arra.size());
                     ImPlot::EndPlot();
                 }
             ImGui::EndChild();
+            // ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
+            //     if (ImPlot::BeginPlot("Magnitude")) {
+            //         ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
+            //         ImPlot::EndPlot();
+            //     }
+            // ImGui::EndChild();
         ImGui::End();
 
         ImGui::Begin("Settings");
