@@ -5,6 +5,7 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -16,6 +17,7 @@
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
 #include <thread>
+#include <atomic>
 #include <cmath>
 #include <iostream>
 #include "imgui.h"
@@ -34,14 +36,17 @@ struct sharedData
     ModulationType modul_type_RX = ModulationType::QPSK;
     std::string device;
     std::vector<std::string> devices;
-    std::vector<double> real_p;
-    std::vector<double> imag_p;
+    std::vector<int16_t> rx_buffer;
+    std::vector<int16_t> tx_buffer;
     std::vector<double> real_p_fft;
     std::vector<double> imag_p_fft;
     std::vector<double> shifted_magnitude;
     std::vector<double> argument;
     std::vector<double> frequency_axis;
     std::vector<double> M_arra;
+    std::vector<std::complex<double>> signal;
+    std::atomic<bool> read = false;
+    std::atomic<bool> dsp = false;
     bool changed_send = false;
     bool changed_quit = false;
     bool changed_rx_gain = false;
@@ -66,13 +71,16 @@ struct sharedData
     int cyclic_prefex = 8;
     int subcarrier = 128;
     int sync_pos = 0;
+    int mtu = 1920;
+    int buffer = 3840;
 
-    sharedData(size_t rx_mtu, int subcarriers) {
+    sharedData(size_t rx_mtu) {
+        rx_buffer.resize(rx_mtu * 2, 0);
+        tx_buffer.resize(rx_mtu * 2, 0);
+        signal.resize(rx_mtu, 0);
         M_arra.resize(rx_mtu, 0);
         real_p_fft.resize(rx_mtu, 0);
         imag_p_fft.resize(rx_mtu, 0);
-        real_p.resize(rx_mtu, 0);
-        imag_p.resize(rx_mtu, 0);
         shifted_magnitude.resize(rx_mtu, 0);
         argument.resize(rx_mtu, 0);
         frequency_axis.resize(rx_mtu, 0);
@@ -80,7 +88,6 @@ struct sharedData
 };
 
 void run_backend(sharedData *sh_data) {
-    schmiddle_state schm_state;
     size_t length;
     SoapySDRKwargs* results = SoapySDRDevice_enumerate(nullptr, &length);
 
@@ -97,58 +104,40 @@ void run_backend(sharedData *sh_data) {
 
     SDRDevice sdr(sh_data->device.c_str());
 
-    fftw_complex* in_build_ofdm = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
-    fftw_complex* out_build_ofdm = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
-
-    fftw_complex* in_spectre = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu));
-    fftw_complex* out_spectre = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sdr.rx_mtu));
-
-    for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-        sh_data->frequency_axis[i] = (i - sdr.rx_mtu / 2.0) * sh_data->sample_rate / sdr.rx_mtu;
-    }
-
-    std::deque<int> bit_fifo;
-    std::vector<double> rx_buffer_double(2 * sdr.rx_mtu, 0);
-    std::vector<double> magnitude(sdr.rx_mtu, 0);
-    std::vector<std::complex<double>> rx_complex(sdr.rx_mtu, 0);
-
-    while (bit_fifo.size() < 100000)
-        bit_fifo.push_back(rand() & 1);
-
     while (sh_data->changed_quit == false) {
         if (!sh_data->changed_cont_time) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             continue;
         }
 
-        if (sh_data->changed_pss_symbols) {
-            build_pss_symbol(in_build_ofdm, out_build_ofdm, sh_data->subcarrier);
-            append_symbol(out_build_ofdm, sdr.tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex);
+        // std::cout << "BACKEND SIZE: " << sh_data->tx_buffer.size() << "\n";
+
+        if (sh_data->read) {
+            void *tx_buffs[] = {sh_data->tx_buffer.data()};
+            void *rx_buffs[] = {sh_data->rx_buffer.data()};
+
+            // std::cout << "BACKEND SIZE: " << sh_data->tx_buffer.size() << "\n";
+            // std::cout << "BACKEND BACK: " << sh_data->tx_buffer.back() << "\n";
+
+
+            int flags = 0;
+            long long timeNs = 0;
+
+            int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
+            // std::cout << "Soapy ERR: " << sr << "\n";
+            (void)sr;
+
+            long long tx_time = timeNs + TX_DELAY;
+            flags = SOAPY_SDR_HAS_TIME;
+
+            if (sh_data->changed_send) {
+                int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
+                // std::cout << "Soapy ERR: " << st << "\n";
+                (void)st;
+            }
+            sh_data->read = false;
+            sh_data->dsp = true;
         }
-
-        while (sdr.tx_buffer.size() < 2 * sdr.tx_mtu) {
-            build_ofdm_symbol(bit_fifo, in_build_ofdm, out_build_ofdm, sh_data->modul_type_TX, sh_data->subcarrier);
-            append_symbol(out_build_ofdm, sdr.tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex);
-        }
-
-        void *rx_buffs[] = {sdr.rx_buffer.data()};
-        void *tx_buffs[] = {sdr.tx_buffer.data()};
-
-        int flags = 0;
-        long long timeNs = 0;
-
-        int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
-        (void)sr;
-
-        long long tx_time = timeNs + TX_DELAY;
-        flags = SOAPY_SDR_HAS_TIME;
-
-        if (sh_data->changed_send) {
-            int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
-            (void)st;
-        }
-
-        sdr.tx_buffer.clear();
 
         if (sh_data->changed_rx_gain) {
             if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_gain))) != 0) {
@@ -202,47 +191,104 @@ void run_backend(sharedData *sh_data) {
             sh_data->changed_tx_bandwidth = false;
         }
 
-        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-            rx_complex[i] = std::complex<double>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
+        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+        //     in_spectre[i][0] = std::real(rx_complex[i]) / 32768.0;
+        //     in_spectre[i][1] = std::imag(rx_complex[i]) / 32768.0;
+        // }
+
+        // fft(in_spectre, out_spectre, sdr.rx_mtu);
+
+        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
+        //     double real = out_spectre[i][0];
+        //     double imag = out_spectre[i][1];
+        //     magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / sdr.rx_mtu) + 1e-12;
+        //     sh_data->argument[i] = atan2(imag, real);
+        // }
+
+        // for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
+        //     sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
+        //     sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
+        // }
+    }
+}
+
+void run_dsp(sharedData *sh_data) {
+    schmiddle_state schm_state;
+
+    fftw_complex* in_build_ofdm = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
+    fftw_complex* out_build_ofdm = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
+
+    fftw_complex* in_spectre = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sh_data->mtu));
+    fftw_complex* out_spectre = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * sh_data->mtu));
+
+    for (int i = 0; i < sh_data->mtu; ++i) {
+        sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
+    }
+
+    std::deque<int> bit_fifo;
+    std::vector<double> magnitude(sh_data->mtu, 0);
+    std::vector<std::complex<double>> rx_complex(sh_data->mtu, 0);
+
+    while (bit_fifo.size() < 100000)
+        bit_fifo.push_back(rand() & 1);
+
+    while (sh_data->changed_quit == false) {
+        if (!sh_data->changed_cont_time) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            continue;
         }
 
-        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-            in_spectre[i][0] = std::real(rx_complex[i]) / 32768.0;
-            in_spectre[i][1] = std::imag(rx_complex[i]) / 32768.0;
+        if (!sh_data->read) {
+            if (sh_data->changed_pss_symbols) {
+                build_pss_symbol(in_build_ofdm, out_build_ofdm, sh_data->subcarrier);
+                append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, 0);
+
+                for (int start = 2 * (sh_data->subcarrier + sh_data->cyclic_prefex); start < (sh_data->buffer - sh_data->subcarrier + sh_data->cyclic_prefex); start += 2 * (sh_data->subcarrier + sh_data->cyclic_prefex)) {
+                    // std::cout << "DSP START: " << start << "\n";
+                    build_ofdm_symbol(bit_fifo, in_build_ofdm, out_build_ofdm, sh_data->modul_type_TX, sh_data->subcarrier);
+                    append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, start);
+                }
+
+                sh_data->read = true;
+            } else {
+                for (int start = 0; start < (sh_data->buffer - sh_data->subcarrier + sh_data->cyclic_prefex); start += 2 * (sh_data->subcarrier + sh_data->cyclic_prefex)) {
+                    // std::cout << "DSP START: " << start << "\n";
+                    build_ofdm_symbol(bit_fifo, in_build_ofdm, out_build_ofdm, sh_data->modul_type_TX, sh_data->subcarrier);
+                    append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, start);
+                }
+
+                sh_data->read = true;
+                // std::cout << "DSP SIZE: " << sh_data->tx_buffer.size() << "\n";
+                // std::cout << "DSP BACK: " << sh_data->tx_buffer.back() << "\n";
+            }
+
         }
+        if (sh_data->dsp) {
+            for (int i = 0; i < sh_data->mtu; ++i) {
+                rx_complex[i] = std::complex<double>(sh_data->rx_buffer[2 * i], sh_data->rx_buffer[2 * i + 1]);
+                // std::cout << "COMPLEX[" << i << "]: "<< rx_complex[i] << "\n";
+            }
 
-        fft(in_spectre, out_spectre, sdr.rx_mtu);
+            if (sh_data->get_schmiddle_pos) {
+                schm_state = schmidl_sync(rx_complex, sh_data->subcarrier);
+                sh_data->sync_pos = schm_state.M;
+                sh_data->M_arra = schm_state.M_arr;
+                sh_data->get_schmiddle_pos = false;
+            }
 
-        for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-            double real = out_spectre[i][0];
-            double imag = out_spectre[i][1];
-            magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / sdr.rx_mtu) + 1e-12;
-            sh_data->argument[i] = atan2(imag, real);
-        }
+            if (sh_data->schmiddle_sync) {
+                rx_complex.erase(rx_complex.begin(), rx_complex.begin() + (schm_state.M + sh_data->subcarrier));
+                rx_complex.resize(sh_data->mtu, 0);
+                remove_cp(rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->real_p_fft, sh_data->imag_p_fft);
+            }
 
-        for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
-            sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
-            sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
-        }
-
-        if (sh_data->get_schmiddle_pos) {
-            schm_state = schmidl_sync(rx_complex, sh_data->subcarrier);
-            sh_data->sync_pos = schm_state.M;
-            sh_data->M_arra = schm_state.M_arr;
-            sh_data->get_schmiddle_pos = false;
-        }
-
-        if (sh_data->schmiddle_sync) {
-            rx_complex.erase(rx_complex.begin(), rx_complex.begin() + (schm_state.M + sh_data->subcarrier));
-            rx_complex.resize(sdr.rx_mtu, 0);
-            remove_cp(rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->real_p_fft, sh_data->imag_p_fft);
-        }
-
-        for (size_t i = 0; i < rx_complex.size(); ++i) {
-            sh_data->real_p[i] = std::real(rx_complex[i]);
-            sh_data->imag_p[i] = std::imag(rx_complex[i]);
+            for (size_t i = 0; i < rx_complex.size(); ++i) {
+                sh_data->signal[i] = std::complex(std::real(rx_complex[i]), std::imag(rx_complex[i]));
+            }
+            sh_data->dsp = false;
         }
     }
+
     fftw_free(in_build_ofdm);
     fftw_free(out_build_ofdm);
     fftw_free(in_spectre);
@@ -309,15 +355,19 @@ void run_gui(sharedData *sh_data) {
 
             ImGui::BeginChild("Constellation Diagram", ImVec2(quoter_w, quoter_h), true);
                 if (ImPlot::BeginPlot("Constellation Diagram")) {
-                    ImPlot::PlotScatter("I/Q", sh_data->real_p.data(), sh_data->imag_p.data(), sh_data->imag_p.size());
+                    ImPlot::PlotScatter("I/Q",
+                        reinterpret_cast<double*>(sh_data->signal.data()),
+                        reinterpret_cast<double*>(sh_data->signal.data()) + 1,
+                        sh_data->signal.size(), 0, 0, sizeof(std::complex<double>)
+                    );
                     ImPlot::EndPlot();
                 }
             ImGui::EndChild();
             ImGui::SameLine();
             ImGui::BeginChild("I/Q samples", ImVec2(tr_quoter_w, quoter_h), true);
                 if (ImPlot::BeginPlot("I/Q samples")) {
-                    ImPlot::PlotLine("I", sh_data->real_p.data(), sh_data->real_p.size());
-                    ImPlot::PlotLine("Q", sh_data->imag_p.data(), sh_data->imag_p.size());
+                    ImPlot::PlotLine("I", reinterpret_cast<const double*>(sh_data->signal.data()), sh_data->signal.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+                    ImPlot::PlotLine("Q", reinterpret_cast<const double*>(sh_data->signal.data()) + 1, sh_data->signal.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
                     ImPlot::EndPlot();
                 }
             ImGui::EndChild();
@@ -369,6 +419,7 @@ void run_gui(sharedData *sh_data) {
                 if (ImGui::Button("Get Schmiddle Sync Pos")) sh_data->get_schmiddle_pos = true;
                 ImGui::SameLine();
                 ImGui::Text(": %d", sh_data->sync_pos);
+                ImGui::InputInt("Sync Pos", &sh_data->sync_pos, 1, 1e1);
                 ImGui::Checkbox("Schmiddle Cox Sync", &sh_data->schmiddle_sync);
 
                 ImGui::SeparatorText("Pre Modulation");
@@ -472,11 +523,13 @@ void run_gui(sharedData *sh_data) {
 }
 
 int main() {
-    sharedData sd(1920, 128);
+    sharedData sd(1920);
 
     std::thread gui_thread(run_gui, &sd);
     std::thread backend_thread(run_backend, &sd);
+    std::thread dsp_thread(run_dsp, &sd);
 
+    dsp_thread.join();
     backend_thread.join();
     gui_thread.join();
 

@@ -47,29 +47,13 @@ std::complex<double> map_symbol(std::deque<int>& fifo, ModulationType mod) {
     }
 }
 
-
-void UpSampler(const std::vector<std::complex<double>>& symbols, std::vector<std::complex<double>>& symbols_ups, int L) {
-    const std::complex<double> i0 (0, 0);
-    size_t len_symbols = symbols.size();
-    symbols_ups.assign(len_symbols * L, i0);
-    for (size_t i = 0; i < len_symbols; i++) {
-        symbols_ups[i * L] = symbols[i];
+int bits_per_symbol(ModulationType type) {
+    switch(type) {
+        case ModulationType::BPSK: return 1;
+        case ModulationType::QPSK: return 2;
+        case ModulationType::QAM16: return 4;
+        default: throw std::invalid_argument("Unsapported modulation type");
     }
-}
-
-void filter(std::vector<std::complex<double>>& symbols_ups, const std::vector<std::complex<double>>& impulse) {
-    size_t n = symbols_ups.size();
-    size_t L = impulse.size();
-    std::vector<std::complex<double>> output(n, 0.0);
-
-    for (size_t i = 0; i < n; i++) {
-        size_t max_j = std::min(L, i + 1);
-        for (size_t j = 0; j < max_j; j++) {
-            output[i] += impulse[j] * symbols_ups[i - j];
-        }
-    }
-
-    symbols_ups.swap(output);
 }
 
 void fft(fftw_complex* in, fftw_complex* out, int N) {
@@ -117,29 +101,37 @@ void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex
     ifft(in, out, subcarrier);
 }
 
-void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, int cyclic_prefex) {
+
+// ВОТ ТУТ ОШИБКА, ЛИБО ДЕЛАТЬ ПО ИНДЕКСАМ ЛИБО КАК-ТО БЕЗОПАСНО ДЕЛАТЬ CLEAR() ДЛЯ МАССИВА SH_DATA->TX_BUFFER !!!!!
+void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, int cyclic_prefex, int start) {
+    std::vector<int16_t> tmp((subcarrier + cyclic_prefex) * 2, 0);
     double SCALE = 1e3;
     // cylic prefex
-    for(int i = subcarrier - cyclic_prefex; i < subcarrier; ++i) {
-        tx.push_back(out[i][0] * SCALE);
-        tx.push_back(out[i][1] * SCALE);
+    int i = subcarrier - cyclic_prefex;
+    for (int j = 0; j < cyclic_prefex; ++j) {
+        if (i < subcarrier) {
+            tmp[2 * j] = out[i][0] * SCALE;
+            tmp[2 * j + 1] = out[i][1] * SCALE;
+            ++i;
+        }
     }
 
     // symbol
-    for(int i = 0; i < subcarrier; ++i) {
-        tx.push_back(out[i][0] * SCALE);
-        tx.push_back(out[i][1] * SCALE);
+    for (int k = cyclic_prefex; k < (subcarrier + cyclic_prefex); ++k) {
+        tmp[2 * k] = out[k - cyclic_prefex][0] * SCALE;
+        tmp[2 * k + 1] = out[k - cyclic_prefex][1] * SCALE;
+    }
+
+    for (int l = 0; l < subcarrier + cyclic_prefex; ++l) {
+        tx[start + (2 * l)] = tmp[2 * l];
+        tx[start + (2 * l + 1)] = tmp[2 * l + 1];\
+        // std::cout << "[start + (2 * l)]:" << start + (2 * l) << "\n";
+        // std::cout << "[start + (2 * l + 1)]:" << start + (2 * l + 1) << "\n";
+        // std::cout << "[(2 * l)]:" << 2 * l << "\n";
+        // std::cout << "[(2 * l + 1)]:" << 2 * l + 1 << "\n";
     }
 }
 
-int bits_per_symbol(ModulationType type) {
-    switch(type) {
-        case ModulationType::BPSK: return 1;
-        case ModulationType::QPSK: return 2;
-        case ModulationType::QAM16: return 4;
-        default: throw std::invalid_argument("Unsapported modulation type");
-    }
-}
 
 schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subcarriers) {
     if (signal.size() == 0) return schmiddle_state{};
