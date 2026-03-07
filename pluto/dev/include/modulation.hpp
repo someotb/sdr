@@ -42,4 +42,8 @@ void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, 
 
 schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subcarriers);
 
-void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar, std::vector<double>& real, std::vector<double>& imag);
+void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<double>> &out_signal);
+
+void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar, std::vector<std::complex<double>> &signal_fft);
+
+void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::vector<std::complex<double>> &out_signal);

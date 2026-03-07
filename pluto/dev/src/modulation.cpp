@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <fftw3.h>
+#include <pstl/glue_algorithm_defs.h>
 #include <stdexcept>
 #include <vector>
 #include <algorithm>
@@ -101,8 +103,6 @@ void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex
     ifft(in, out, subcarrier);
 }
 
-
-// ВОТ ТУТ ОШИБКА, ЛИБО ДЕЛАТЬ ПО ИНДЕКСАМ ЛИБО КАК-ТО БЕЗОПАСНО ДЕЛАТЬ CLEAR() ДЛЯ МАССИВА SH_DATA->TX_BUFFER !!!!!
 void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, int cyclic_prefex, int start) {
     std::vector<int16_t> tmp((subcarrier + cyclic_prefex) * 2, 0);
     double SCALE = 1e3;
@@ -124,9 +124,9 @@ void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, 
 
     for (int l = 0; l < subcarrier + cyclic_prefex; ++l) {
         tx[start + (2 * l)] = tmp[2 * l];
-        tx[start + (2 * l + 1)] = tmp[2 * l + 1];\
-        // std::cout << "[start + (2 * l)]:" << start + (2 * l) << "\n";
-        // std::cout << "[start + (2 * l + 1)]:" << start + (2 * l + 1) << "\n";
+        tx[start + (2 * l + 1)] = tmp[2 * l + 1];
+        // std::cout << "tx[start + (2 * l)]:" << tx[start + (2 * l)] << "\n";
+        // std::cout << "tx[start + (2 * l + 1)]:" << tx[start + (2 * l + 1)] << "\n";
         // std::cout << "[(2 * l)]:" << 2 * l << "\n";
         // std::cout << "[(2 * l + 1)]:" << 2 * l + 1 << "\n";
     }
@@ -161,23 +161,59 @@ schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subc
     return sch_s;
 }
 
-void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar, std::vector<double>& real, std::vector<double>& imag) {
+void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<double>> &out_signal) {
+    out_signal.clear();
+
+    if (pos == 0) {
+        out_signal.resize(in_signal.size() - cp - subcarrar, 0);
+        for (size_t i = 0; i < out_signal.size(); ++i)
+            out_signal[i] = in_signal[i + subcarrar];
+        return;
+    } else if (pos > 0 && pos < subcarrar + cp) {
+        out_signal.resize(in_signal.size() - 2 * (cp + subcarrar), 0);
+        for (size_t i = 0; i < out_signal.size(); ++i) {
+            out_signal[i] = in_signal[i + pos + subcarrar];
+        }
+        return;
+    }
+}
+
+void remove_cp(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, std::vector<std::complex<double>> &out_signal) {
+    size_t cnt_ofdm_symbols = in_signal.size() / (cp + subcarrar);
+    out_signal.resize(in_signal.size() - cp * cnt_ofdm_symbols);
+    // std::cout << "beg: " << out_signal.size() << "\n";
+    for (size_t i = 0; i < in_signal.size() / (cp + subcarrar); ++i) {
+        for (int j = 0; j < subcarrar; ++j) {
+            out_signal[j + (i * subcarrar)] = in_signal[j + (i * subcarrar) + cp + (i * cp)];
+            // std::cout << "j + (i * subcarrar) + cp + (i * cp): " << j + (i * subcarrar) + cp + (i * cp) << "\n";
+            // std::cout << "j + (i * subcarrar) + cp: " << j + (i * subcarrar) + cp << "\n";
+        }
+        // std::cout << "i: " << i << "\n";
+        // std::cout << "out_signal.begin() + (i * subcarrar): " << (i * subcarrar) << "\n";
+        // std::cout << "in_signal.begin() + cp + (i * subcarrar): " << cp + (i * cp) + (i * subcarrar) << "\n";
+        // std::cout << "in_signal.begin() + cp + subcarrar + (i * subcarrar): " << cp + (i * cp) + subcarrar + (i * subcarrar)<< "\n";
+    }
+    // out_signal.erase(std::remove(out_signal.begin(), out_signal.end(), std::complex(static_cast<double>(0),static_cast<double>(0))), out_signal.end());
+    // for (auto it = out_signal.begin(); it != out_signal.end(); ++it) {
+    //     std::cout << *it << "\n";
+    // }
+    // std::cout << "end: " << out_signal.size() << "\n";
+}
+
+void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::vector<std::complex<double>> &out_signal) {
     fftw_complex* in_fft = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * subcarrar));
     fftw_complex* out_fft = static_cast<fftw_complex*> (fftw_malloc(sizeof(fftw_complex) * subcarrar));
 
-    int offset = 0;
-    std::vector<std::complex<double>> tmp;
-    for (size_t i = 1; i <= signal.size() / (cp + subcarrar); ++i) {
-        offset += cp + subcarrar;
-        tmp.insert(tmp.begin(), signal.begin() + offset - subcarrar, signal.begin() + offset);
+    for (size_t i = 0; i < in_signal.size() / subcarrar; ++i) {
         for (int j = 0; j < subcarrar; ++j) {
-            in_fft[j][0] = std::real(tmp[j]);
-            in_fft[j][1] = std::imag(tmp[j]);
+            in_fft[j][0] = std::real(in_signal[j + (i * subcarrar)]);
+            in_fft[j][1] = std::imag(in_signal[j + (i * subcarrar)]);
         }
+
         fft(in_fft, out_fft, subcarrar);
+
         for (int k = 0; k < subcarrar; ++k) {
-            real[(i - 1) * subcarrar + k] = out_fft[k][0];
-            imag[(i - 1) * subcarrar + k] = out_fft[k][1];
+            out_signal[k + (i * subcarrar)] = std::complex(out_fft[k][0], out_fft[k][1]);
         }
     }
     fftw_free(in_fft);
