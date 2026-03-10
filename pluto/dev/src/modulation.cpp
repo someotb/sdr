@@ -17,14 +17,14 @@
 std::complex<double> map_symbol(std::deque<int>& fifo, ModulationType mod) {
     switch(mod) {
         case ModulationType::BPSK: {
-            int b = fifo.front(); fifo.pop_front();
+            int b = fifo.front(); fifo.push_back(b); fifo.pop_front();
             double v = (1.0 - 2.0*b);
             return {v, 0.0};
         }
 
         case ModulationType::QPSK: {
-            int b0 = fifo.front(); fifo.pop_front();
-            int b1 = fifo.front(); fifo.pop_front();
+            int b0 = fifo.front(); fifo.push_back(b0); fifo.pop_front();
+            int b1 = fifo.front(); fifo.push_back(b1); fifo.pop_front();
 
             double real = (1.0 - 2.0*b0);
             double imag = (1.0 - 2.0*b1);
@@ -33,10 +33,10 @@ std::complex<double> map_symbol(std::deque<int>& fifo, ModulationType mod) {
         }
 
         case ModulationType::QAM16: {
-            int b0=fifo.front(); fifo.pop_front();
-            int b1=fifo.front(); fifo.pop_front();
-            int b2=fifo.front(); fifo.pop_front();
-            int b3=fifo.front(); fifo.pop_front();
+            int b0=fifo.front(); fifo.push_back(b0); fifo.pop_front();
+            int b1=fifo.front(); fifo.push_back(b1); fifo.pop_front();
+            int b2=fifo.front(); fifo.push_back(b2); fifo.pop_front();
+            int b3=fifo.front(); fifo.push_back(b3); fifo.pop_front();
 
             double real = (1 - 2 * b0) * (2 - (1 - 2 * b2));
             double imag = (1 - 2 * b1) * (2 - (1 - 2 * b3));
@@ -125,10 +125,6 @@ void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, 
     for (int l = 0; l < subcarrier + cyclic_prefex; ++l) {
         tx[start + (2 * l)] = tmp[2 * l];
         tx[start + (2 * l + 1)] = tmp[2 * l + 1];
-        // std::cout << "tx[start + (2 * l)]:" << tx[start + (2 * l)] << "\n";
-        // std::cout << "tx[start + (2 * l + 1)]:" << tx[start + (2 * l + 1)] << "\n";
-        // std::cout << "[(2 * l)]:" << 2 * l << "\n";
-        // std::cout << "[(2 * l + 1)]:" << 2 * l + 1 << "\n";
     }
 }
 
@@ -169,7 +165,8 @@ void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcar
         for (size_t i = 0; i < out_signal.size(); ++i)
             out_signal[i] = in_signal[i + subcarrar];
         return;
-    } else if (pos > 0 && pos < subcarrar + cp) {
+        // } else if (pos > 0 && pos < subcarrar + cp) {
+        } else {
         out_signal.resize(in_signal.size() - 2 * (cp + subcarrar), 0);
         for (size_t i = 0; i < out_signal.size(); ++i) {
             out_signal[i] = in_signal[i + pos + subcarrar];
@@ -181,23 +178,11 @@ void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcar
 void remove_cp(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, std::vector<std::complex<double>> &out_signal) {
     size_t cnt_ofdm_symbols = in_signal.size() / (cp + subcarrar);
     out_signal.resize(in_signal.size() - cp * cnt_ofdm_symbols);
-    // std::cout << "beg: " << out_signal.size() << "\n";
     for (size_t i = 0; i < in_signal.size() / (cp + subcarrar); ++i) {
         for (int j = 0; j < subcarrar; ++j) {
             out_signal[j + (i * subcarrar)] = in_signal[j + (i * subcarrar) + cp + (i * cp)];
-            // std::cout << "j + (i * subcarrar) + cp + (i * cp): " << j + (i * subcarrar) + cp + (i * cp) << "\n";
-            // std::cout << "j + (i * subcarrar) + cp: " << j + (i * subcarrar) + cp << "\n";
         }
-        // std::cout << "i: " << i << "\n";
-        // std::cout << "out_signal.begin() + (i * subcarrar): " << (i * subcarrar) << "\n";
-        // std::cout << "in_signal.begin() + cp + (i * subcarrar): " << cp + (i * cp) + (i * subcarrar) << "\n";
-        // std::cout << "in_signal.begin() + cp + subcarrar + (i * subcarrar): " << cp + (i * cp) + subcarrar + (i * subcarrar)<< "\n";
     }
-    // out_signal.erase(std::remove(out_signal.begin(), out_signal.end(), std::complex(static_cast<double>(0),static_cast<double>(0))), out_signal.end());
-    // for (auto it = out_signal.begin(); it != out_signal.end(); ++it) {
-    //     std::cout << *it << "\n";
-    // }
-    // std::cout << "end: " << out_signal.size() << "\n";
 }
 
 void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::vector<std::complex<double>> &out_signal) {

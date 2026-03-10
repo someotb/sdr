@@ -20,6 +20,7 @@
 #include <atomic>
 #include <cmath>
 #include <iostream>
+#include <fstream>
 #include "imgui.h"
 #include "implot.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -36,7 +37,7 @@ struct sharedData
     ModulationType modul_type_RX = ModulationType::QPSK;
     std::string device;
     std::vector<std::string> devices;
-    std::vector<int16_t> rx_buffer;
+    std::vector<std::complex<double>> rx_complex;
     std::vector<int16_t> tx_buffer;
     std::vector<double> real_p_fft;
     std::vector<double> imag_p_fft;
@@ -78,8 +79,8 @@ struct sharedData
 
     sharedData(size_t rx_mtu)
     {
-        rx_buffer.resize(rx_mtu * 2, 0);
         tx_buffer.resize(rx_mtu * 2, 0);
+        rx_complex.resize(rx_mtu, 0);
         signal.resize(rx_mtu, 0);
         M_arra.resize(rx_mtu, 0);
         real_p_fft.resize(rx_mtu, 0);
@@ -94,7 +95,6 @@ void run_backend(sharedData *sh_data)
 {
     size_t length;
     SoapySDRKwargs *results = SoapySDRDevice_enumerate(nullptr, &length);
-
     sh_data->devices.clear();
 
     for (size_t i = 0; i < length / 2; ++i)
@@ -110,6 +110,7 @@ void run_backend(sharedData *sh_data)
 
     SDRDevice sdr(sh_data->device.c_str());
 
+
     while (sh_data->changed_quit == false)
     {
         if (!sh_data->changed_cont_time)
@@ -118,22 +119,26 @@ void run_backend(sharedData *sh_data)
             continue;
         }
 
-        // std::cout << "BACKEND SIZE: " << sh_data->tx_buffer.size() << "\n";
-
         if (sh_data->read)
         {
             void *tx_buffs[] = {sh_data->tx_buffer.data()};
-            void *rx_buffs[] = {sh_data->rx_buffer.data()};
-
-            // std::cout << "BACKEND SIZE: " << sh_data->tx_buffer.size() << "\n";
-            // std::cout << "BACKEND BACK: " << sh_data->tx_buffer.back() << "\n";
+            void *rx_buffs[] = {sdr.rx_buffer.data()};
 
             int flags = 0;
             long long timeNs = 0;
 
             int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
-            // std::cout << "Soapy ERR: " << sr << "\n";
+
+            for (int i = 0; i < sh_data->mtu; ++i) {
+                sh_data->rx_complex[i] = std::complex<double>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
+                sh_data->signal[i] = std::complex(std::real(sh_data->rx_complex[i]), std::imag(sh_data->rx_complex[i]));
+            }
+
+            std::ofstream file1("ofdm_int16_t.pcm");
+            file1.write(reinterpret_cast<const char*>(sdr.rx_buffer.data()), sr * 2 * sizeof(int16_t));
+            file1.close();
             (void)sr;
+
 
             long long tx_time = timeNs + TX_DELAY;
             flags = SOAPY_SDR_HAS_TIME;
@@ -146,6 +151,7 @@ void run_backend(sharedData *sh_data)
             }
             sh_data->read = false;
             sh_data->dsp = true;
+
         }
 
         if (sh_data->changed_rx_gain)
@@ -243,17 +249,16 @@ void run_dsp(sharedData *sh_data)
     fftw_complex *in_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
     fftw_complex *out_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
 
-    fftw_complex *in_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->mtu));
-    fftw_complex *out_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->mtu));
+    // fftw_complex *in_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->mtu));
+    // fftw_complex *out_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->mtu));
 
-    for (int i = 0; i < sh_data->mtu; ++i)
-    {
-        sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
-    }
+    // for (int i = 0; i < sh_data->mtu; ++i)
+    // {
+    //     sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
+    // }
 
     std::deque<int> bit_fifo;
     std::vector<double> magnitude(sh_data->mtu, 0);
-    std::vector<std::complex<double>> rx_complex(sh_data->mtu, 0);
     std::vector<std::complex<double>> rx_complex_remove_pss(sh_data->mtu, 0);
     std::vector<std::complex<double>> rx_complex_remove_cp(sh_data->mtu, 0);
     std::vector<std::complex<double>> rx_complex_fft(sh_data->mtu, 0);
@@ -299,20 +304,29 @@ void run_dsp(sharedData *sh_data)
             }
         }
         if (sh_data->dsp) {
-            for (int i = 0; i < sh_data->mtu; ++i) {
-                rx_complex[i] = std::complex<double>(sh_data->rx_buffer[2 * i], sh_data->rx_buffer[2 * i + 1]);
-                sh_data->signal[i] = std::complex(std::real(rx_complex[i]), std::imag(rx_complex[i]));
+            std::ofstream file2("ofdm_complex.pcm");
+
+            // короче меня смущает, что файл пишет 3840 * 2, а по сути sh_data->rx_buffer.size() = 3840, короче почекай это
+            // цикл снизу слишком ресурсо затратный, так что отправка перестает работать, unlucky.
+            // for (auto e : sh_data->rx_buffer) {
+            //     std::cout << "e: " << e << "\n";
+            // }
+
+            if (file2.is_open()) {
+                file2.write(reinterpret_cast<const char*>(sh_data->rx_complex.data()), sh_data->rx_complex.size() * sizeof(std::complex<double>));
             }
 
+            file2.close();
+
             if (sh_data->get_schmiddle_pos) {
-                schm_state = schmidl_sync(rx_complex, sh_data->subcarrier);
+                schm_state = schmidl_sync(sh_data->rx_complex, sh_data->subcarrier);
                 sh_data->sync_pos = schm_state.M;
                 sh_data->M_arra = schm_state.M_arr;
                 sh_data->get_schmiddle_pos = false;
             }
 
             if (sh_data->remove_pss_symbol) {
-                remove_pss(rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
+                remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
             }
 
             if (sh_data->schmiddle_sync) {
@@ -331,8 +345,8 @@ void run_dsp(sharedData *sh_data)
 
     fftw_free(in_build_ofdm);
     fftw_free(out_build_ofdm);
-    fftw_free(in_spectre);
-    fftw_free(out_spectre);
+    // fftw_free(in_spectre);
+    // fftw_free(out_spectre);
 }
 
 void run_gui(sharedData *sh_data)
