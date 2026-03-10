@@ -43,11 +43,6 @@ set(MAIN_SOURCE_FILES
     ${SRC_DIR}/modulation.cpp
 )
 
-set(TEST_SOURCE_FILES
-    ${SRC_DIR}/test.cpp
-    ${SRC_DIR}/modulation.cpp
-)
-
 add_executable(main ${MAIN_SOURCE_FILES})
 
 target_link_libraries(main PRIVATE
@@ -57,12 +52,5 @@ target_link_libraries(main PRIVATE
     ${SDL2_LIBRARIES}
     ${OPENGL_LIBRARIES}
     ${GLEW_LIBRARIES}
-    ${SoapySDR_LIBRARIES}
-)
-
-add_executable(test ${TEST_SOURCE_FILES})
-
-target_link_libraries(test PRIVATE
-    ${FFTW_LIB}
     ${SoapySDR_LIBRARIES}
 )

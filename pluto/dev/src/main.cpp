@@ -38,14 +38,12 @@ struct sharedData
     std::string device;
     std::vector<std::string> devices;
     std::vector<std::complex<double>> rx_complex;
+    std::vector<std::complex<double>> rx_complex_fft_gui;
     std::vector<int16_t> tx_buffer;
-    std::vector<double> real_p_fft;
-    std::vector<double> imag_p_fft;
     std::vector<double> shifted_magnitude;
     std::vector<double> argument;
     std::vector<double> frequency_axis;
     std::vector<double> M_arra;
-    std::vector<std::complex<double>> signal;
     std::atomic<bool> form = true;
     std::atomic<bool> read = false;
     std::atomic<bool> dsp = false;
@@ -81,10 +79,8 @@ struct sharedData
     {
         tx_buffer.resize(rx_mtu * 2, 0);
         rx_complex.resize(rx_mtu, 0);
-        signal.resize(rx_mtu, 0);
         M_arra.resize(rx_mtu, 0);
-        real_p_fft.resize(rx_mtu, 0);
-        imag_p_fft.resize(rx_mtu, 0);
+        rx_complex_fft_gui.resize(rx_mtu, 0);
         shifted_magnitude.resize(rx_mtu, 0);
         argument.resize(rx_mtu, 0);
         frequency_axis.resize(rx_mtu, 0);
@@ -128,17 +124,11 @@ void run_backend(sharedData *sh_data)
             long long timeNs = 0;
 
             int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
+            (void)sr;
 
             for (int i = 0; i < sh_data->mtu; ++i) {
                 sh_data->rx_complex[i] = std::complex<double>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
-                sh_data->signal[i] = std::complex(std::real(sh_data->rx_complex[i]), std::imag(sh_data->rx_complex[i]));
             }
-
-            std::ofstream file1("ofdm_int16_t.pcm");
-            file1.write(reinterpret_cast<const char*>(sdr.rx_buffer.data()), sr * 2 * sizeof(int16_t));
-            file1.close();
-            (void)sr;
-
 
             long long tx_time = timeNs + TX_DELAY;
             flags = SOAPY_SDR_HAS_TIME;
@@ -146,7 +136,6 @@ void run_backend(sharedData *sh_data)
             if (sh_data->changed_send)
             {
                 int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
-                // std::cout << "Soapy ERR: " << st << "\n";
                 (void)st;
             }
             sh_data->read = false;
@@ -220,25 +209,6 @@ void run_backend(sharedData *sh_data)
             }
             sh_data->changed_tx_bandwidth = false;
         }
-
-        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-        //     in_spectre[i][0] = std::real(rx_complex[i]) / 32768.0;
-        //     in_spectre[i][1] = std::imag(rx_complex[i]) / 32768.0;
-        // }
-
-        // fft(in_spectre, out_spectre, sdr.rx_mtu);
-
-        // for (size_t i = 0; i < sdr.rx_mtu; ++i) {
-        //     double real = out_spectre[i][0];
-        //     double imag = out_spectre[i][1];
-        //     magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / sdr.rx_mtu) + 1e-12;
-        //     sh_data->argument[i] = atan2(imag, real);
-        // }
-
-        // for (size_t i = 0; i < sdr.rx_mtu / 2; ++i) {
-        //     sh_data->shifted_magnitude[i] = magnitude[i + sdr.rx_mtu / 2];
-        //     sh_data->shifted_magnitude[i + sdr.rx_mtu / 2] = magnitude[i];
-        // }
     }
 }
 
@@ -249,16 +219,13 @@ void run_dsp(sharedData *sh_data)
     fftw_complex *in_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
     fftw_complex *out_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
 
-    // fftw_complex *in_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->mtu));
-    // fftw_complex *out_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->mtu));
+   
 
-    // for (int i = 0; i < sh_data->mtu; ++i)
-    // {
-    //     sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
-    // }
+    for (int i = 0; i < sh_data->mtu; ++i) {
+        sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
+    }
 
     std::deque<int> bit_fifo;
-    std::vector<double> magnitude(sh_data->mtu, 0);
     std::vector<std::complex<double>> rx_complex_remove_pss(sh_data->mtu, 0);
     std::vector<std::complex<double>> rx_complex_remove_cp(sh_data->mtu, 0);
     std::vector<std::complex<double>> rx_complex_fft(sh_data->mtu, 0);
@@ -304,20 +271,6 @@ void run_dsp(sharedData *sh_data)
             }
         }
         if (sh_data->dsp) {
-            std::ofstream file2("ofdm_complex.pcm");
-
-            // короче меня смущает, что файл пишет 3840 * 2, а по сути sh_data->rx_buffer.size() = 3840, короче почекай это
-            // цикл снизу слишком ресурсо затратный, так что отправка перестает работать, unlucky.
-            // for (auto e : sh_data->rx_buffer) {
-            //     std::cout << "e: " << e << "\n";
-            // }
-
-            if (file2.is_open()) {
-                file2.write(reinterpret_cast<const char*>(sh_data->rx_complex.data()), sh_data->rx_complex.size() * sizeof(std::complex<double>));
-            }
-
-            file2.close();
-
             if (sh_data->get_schmiddle_pos) {
                 schm_state = schmidl_sync(sh_data->rx_complex, sh_data->subcarrier);
                 sh_data->sync_pos = schm_state.M;
@@ -333,10 +286,12 @@ void run_dsp(sharedData *sh_data)
                 remove_cp(rx_complex_remove_pss, sh_data->cyclic_prefex, sh_data->subcarrier, rx_complex_remove_cp);
                 decode(rx_complex_remove_cp, sh_data->subcarrier, rx_complex_fft);
                 for (size_t i = 0; i < rx_complex_fft.size(); ++i) {
-                    sh_data->real_p_fft[i] = std::real(rx_complex_fft[i]);
-                    sh_data->imag_p_fft[i] = std::imag(rx_complex_fft[i]);
+                    sh_data->rx_complex_fft_gui[i] = rx_complex_fft[i];
+
                 }
             }
+
+            spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument);
 
             sh_data->dsp = false;
             sh_data->form = true;
@@ -345,8 +300,6 @@ void run_dsp(sharedData *sh_data)
 
     fftw_free(in_build_ofdm);
     fftw_free(out_build_ofdm);
-    // fftw_free(in_spectre);
-    // fftw_free(out_spectre);
 }
 
 void run_gui(sharedData *sh_data)
@@ -414,9 +367,9 @@ void run_gui(sharedData *sh_data)
         if (ImPlot::BeginPlot("Constellation Diagram"))
         {
             ImPlot::PlotScatter("I/Q",
-                                reinterpret_cast<double *>(sh_data->signal.data()),
-                                reinterpret_cast<double *>(sh_data->signal.data()) + 1,
-                                sh_data->signal.size(), 0, 0, sizeof(std::complex<double>));
+                                reinterpret_cast<double *>(sh_data->rx_complex.data()),
+                                reinterpret_cast<double *>(sh_data->rx_complex.data()) + 1,
+                                sh_data->rx_complex.size(), 0, 0, sizeof(std::complex<double>));
             ImPlot::EndPlot();
         }
         ImGui::EndChild();
@@ -424,15 +377,18 @@ void run_gui(sharedData *sh_data)
         ImGui::BeginChild("I/Q samples", ImVec2(tr_quoter_w, quoter_h), true);
         if (ImPlot::BeginPlot("I/Q samples"))
         {
-            ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->signal.data()), sh_data->signal.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
-            ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->signal.data()) + 1, sh_data->signal.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+            ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex.data()), sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+            ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex.data()) + 1, sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
             ImPlot::EndPlot();
         }
         ImGui::EndChild();
         ImGui::BeginChild("Constellation Diagram After FFT", ImVec2(quoter_w, quoter_h), true);
         if (ImPlot::BeginPlot("Constellation Diagram After FFT"))
         {
-            ImPlot::PlotScatter("I/Q", sh_data->real_p_fft.data(), sh_data->imag_p_fft.data(), sh_data->imag_p_fft.size());
+            ImPlot::PlotScatter("I/Q",
+                                reinterpret_cast<double *>(sh_data->rx_complex_fft_gui.data()),
+                                reinterpret_cast<double *>(sh_data->rx_complex_fft_gui.data()) + 1,
+                                sh_data->rx_complex_fft_gui.size(), 0, 0, sizeof(std::complex<double>));
             ImPlot::EndPlot();
         }
         ImGui::EndChild();
@@ -440,24 +396,24 @@ void run_gui(sharedData *sh_data)
         ImGui::BeginChild("I/Q Samples After FFT", ImVec2(tr_quoter_w, quoter_h), true);
         if (ImPlot::BeginPlot("I/Q Samples After FFT"))
         {
-            ImPlot::PlotLine("I", sh_data->real_p_fft.data(), sh_data->real_p_fft.size());
-            ImPlot::PlotLine("Q", sh_data->imag_p_fft.data(), sh_data->imag_p_fft.size());
+            ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()), sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+            ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()) + 1, sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
             ImPlot::EndPlot();
         }
         ImGui::EndChild();
-        ImGui::BeginChild("M Array", ImVec2(size.x, quoter_h), true);
-        if (ImPlot::BeginPlot("M Array"))
-        {
-            ImPlot::PlotLine("M Array", sh_data->M_arra.data(), sh_data->M_arra.size());
-            ImPlot::EndPlot();
-        }
-        ImGui::EndChild();
-        // ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
-        //     if (ImPlot::BeginPlot("Magnitude")) {
-        //         ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
-        //         ImPlot::EndPlot();
-        //     }
+        // ImGui::BeginChild("M Array", ImVec2(size.x, quoter_h), true);
+        // if (ImPlot::BeginPlot("M Array"))
+        // {
+        //     ImPlot::PlotLine("M Array", sh_data->M_arra.data(), sh_data->M_arra.size());
+        //     ImPlot::EndPlot();
+        // }
         // ImGui::EndChild();
+        ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
+            if (ImPlot::BeginPlot("Magnitude")) {
+                ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
+                ImPlot::EndPlot();
+            }
+        ImGui::EndChild();
         ImGui::End();
 
         ImGui::Begin("Settings");

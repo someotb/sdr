@@ -40,6 +40,8 @@ void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex
 
 void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, int cyclic_prefex, int start);
 
+void spectrum(std::vector<std::complex<double>> &in_signal, std::vector<double> &shifted_magnitude, std::vector<double> &argument);
+
 schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subcarriers);
 
 void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<double>> &out_signal);

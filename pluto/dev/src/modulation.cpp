@@ -94,10 +94,20 @@ void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex
         bit_fifo.push_back(rand() & 1);
 
     for(int k = 0; k < subcarrier; ++k) {
-        auto s = map_symbol(bit_fifo, mod);
-
-        in[k][0] = s.real();
-        in[k][1] = s.imag();
+        if (k > subcarrier / 2 - 28 && k < subcarrier / 2) { 
+            in[k][0] = 0;
+            in[k][1] = 0;
+        } else if (k > subcarrier / 2 && k < subcarrier / 2 + 27) {
+            in[k][0] = 0;
+            in[k][1] = 0;
+        } else if (k == 0) {
+            in[k][0] = 0;
+            in[k][1] = 0;
+        } else {
+            auto s = map_symbol(bit_fifo, mod);
+            in[k][0] = s.real();
+            in[k][1] = s.imag();
+        }
     }
 
     ifft(in, out, subcarrier);
@@ -105,7 +115,7 @@ void build_ofdm_symbol(std::deque<int>& bit_fifo, fftw_complex* in, fftw_complex
 
 void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, int cyclic_prefex, int start) {
     std::vector<int16_t> tmp((subcarrier + cyclic_prefex) * 2, 0);
-    double SCALE = 1e3;
+    double SCALE = 16000;
     // cylic prefex
     int i = subcarrier - cyclic_prefex;
     for (int j = 0; j < cyclic_prefex; ++j) {
@@ -126,6 +136,34 @@ void append_symbol(fftw_complex* out, std::vector<int16_t>& tx, int subcarrier, 
         tx[start + (2 * l)] = tmp[2 * l];
         tx[start + (2 * l + 1)] = tmp[2 * l + 1];
     }
+}
+
+void spectrum(std::vector<std::complex<double>> &in_signal, std::vector<double> &shifted_magnitude, std::vector<double> &argument) {
+    fftw_complex *in_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * in_signal.size()));
+    fftw_complex *out_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * in_signal.size()));
+    std::vector<double> magnitude(in_signal.size(), 0);
+    
+    for (size_t i = 0; i < in_signal.size(); ++i) {
+        in_spectre[i][0] = std::real(in_signal[i]) / 32768.0;
+        in_spectre[i][1] = std::imag(in_signal[i]) / 32768.0;
+    }
+
+    fft(in_spectre, out_spectre, in_signal.size());
+
+    for (size_t i = 0; i < in_signal.size(); ++i) {
+        double real = out_spectre[i][0];
+        double imag = out_spectre[i][1];
+        magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / in_signal.size());
+        argument[i] = atan2(imag, real);
+    }
+
+    for (size_t i = 0; i < in_signal.size() / 2; ++i) {
+        shifted_magnitude[i] = magnitude[i + in_signal.size() / 2];
+        shifted_magnitude[i + in_signal.size() / 2] = magnitude[i];
+    }
+
+    fftw_free(in_spectre);
+    fftw_free(out_spectre);
 }
 
 
@@ -165,8 +203,7 @@ void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcar
         for (size_t i = 0; i < out_signal.size(); ++i)
             out_signal[i] = in_signal[i + subcarrar];
         return;
-        // } else if (pos > 0 && pos < subcarrar + cp) {
-        } else {
+    } else if (pos > 0 && pos < subcarrar + cp) {
         out_signal.resize(in_signal.size() - 2 * (cp + subcarrar), 0);
         for (size_t i = 0; i < out_signal.size(); ++i) {
             out_signal[i] = in_signal[i + pos + subcarrar];
