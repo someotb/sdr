@@ -106,7 +106,6 @@ void run_backend(sharedData *sh_data)
 
     SDRDevice sdr(sh_data->device.c_str());
 
-
     while (sh_data->changed_quit == false)
     {
         if (!sh_data->changed_cont_time)
@@ -123,90 +122,74 @@ void run_backend(sharedData *sh_data)
             int flags = 0;
             long long timeNs = 0;
 
-            int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
-            (void)sr;
+            size_t sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
+            if (sr != sdr.tx_mtu)
+                std::cout << "[ERROR] Read stream | Error code: " << sr << "\n";
 
-            for (int i = 0; i < sh_data->mtu; ++i) {
+            for (int i = 0; i < sh_data->mtu; ++i)
                 sh_data->rx_complex[i] = std::complex<double>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
-            }
 
             long long tx_time = timeNs + TX_DELAY;
             flags = SOAPY_SDR_HAS_TIME;
 
             if (sh_data->changed_send)
             {
-                int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
-                (void)st;
+                size_t st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
+                if (st != sdr.tx_mtu)
+                    std::cout << "[ERROR] Write stream | Error code: " << st << "\n";
             }
             sh_data->read = false;
             sh_data->dsp = true;
-
         }
 
         if (sh_data->changed_rx_gain)
         {
             if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_gain))) != 0)
-            {
-                std::cout << "[ERROR] SET RX GAIN | ERR CODE: " << err << "\n";
-            }
+                std::cout << "[ERROR] Set RX gain | Error code: " << err << "\n";
             sh_data->changed_rx_gain = false;
         }
 
         if (sh_data->changed_tx_gain)
         {
             if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_gain))) != 0)
-            {
-                std::cout << "[ERROR] SET TX GAIN | ERR CODE: " << err << "\n";
-            }
+                std::cout << "[ERROR] Set TX gain | Error code: " << err << "\n";
             sh_data->changed_tx_gain = false;
         }
 
         if (sh_data->changed_rx_freq)
         {
             if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_RX, 0, sh_data->rx_frequency, NULL)) != 0)
-            {
-                std::cout << "[ERROR] SET RX FREQ | ERR CODE: " << err << "\n";
-            }
+                std::cout << "[ERROR] Set RX frequency | Error code: " << err << "\n";
             sh_data->changed_rx_freq = false;
         }
 
         if (sh_data->changed_tx_freq)
         {
             if (int err; (err = SoapySDRDevice_setFrequency(sdr.sdr, SOAPY_SDR_TX, 0, sh_data->tx_frequency, NULL)) != 0)
-            {
-                std::cout << "[ERROR] SET TX FREQ | ERR CODE: " << err << "\n";
-            }
+                std::cout << "[ERROR] Set TX frequency | Error code: " << err << "\n";
             sh_data->changed_tx_freq = false;
         }
 
         if (sh_data->changed_sample_rate)
         {
             if (int err; (err = SoapySDRDevice_setSampleRate(sdr.sdr, SOAPY_SDR_RX, 0, sh_data->sample_rate)) != 0)
-            {
-                std::cout << "[ERROR] SET RX SAMPLE RATE | ERR CODE: " << err << "\n";
-            }
+                std::cout << "[ERROR] Set RX sample rate | Error code: " << err << "\n";
             if (int err; (err = SoapySDRDevice_setSampleRate(sdr.sdr, SOAPY_SDR_TX, 0, sh_data->sample_rate)) != 0)
-            {
-                std::cout << "[ERROR] SET TX SAMPLE RATE | ERR CODE: " << err << "\n";
-            }
+                std::cout << "[ERROR] Set TX sample rate | Error code: " << err << "\n";
             sh_data->changed_sample_rate = false;
         }
 
         if (sh_data->changed_rx_bandwidth)
         {
             if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_bandwidth))) != 0)
-            {
-                std::cout << "[ERROR] SET RX BANDWIDTH | ERR CODE: " << err << "\n";
-            }
+                std::cout << "[ERROR] Set RX bandwidth | Error code: " << err << "\n";
             sh_data->changed_rx_bandwidth = false;
         }
 
         if (sh_data->changed_tx_bandwidth)
         {
             if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_bandwidth))) != 0)
-            {
-                std::cout << "[ERROR] SET TX BANDWIDTH | ERR CODE: " << err << "\n";
-            }
+                std::cout << "[ERROR] Set TX bandwidth | Error code: " << err << "\n";
             sh_data->changed_tx_bandwidth = false;
         }
     }
@@ -219,9 +202,8 @@ void run_dsp(sharedData *sh_data)
     fftw_complex *in_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
     fftw_complex *out_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
 
-   
-
-    for (int i = 0; i < sh_data->mtu; ++i) {
+    for (int i = 0; i < sh_data->mtu; ++i)
+    {
         sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
     }
 
@@ -229,7 +211,6 @@ void run_dsp(sharedData *sh_data)
     std::vector<std::complex<double>> rx_complex_remove_pss(sh_data->mtu, 0);
     std::vector<std::complex<double>> rx_complex_remove_cp(sh_data->mtu, 0);
     std::vector<std::complex<double>> rx_complex_fft(sh_data->mtu, 0);
-
 
     while (bit_fifo.size() < 1)
         bit_fifo.push_back(rand() & 1);
@@ -270,24 +251,26 @@ void run_dsp(sharedData *sh_data)
                 sh_data->read = true;
             }
         }
-        if (sh_data->dsp) {
-            if (sh_data->get_schmiddle_pos) {
+        if (sh_data->dsp)
+        {
+            if (sh_data->get_schmiddle_pos)
+            {
                 schm_state = schmidl_sync(sh_data->rx_complex, sh_data->subcarrier);
                 sh_data->sync_pos = schm_state.M;
                 sh_data->M_arra = schm_state.M_arr;
                 sh_data->get_schmiddle_pos = false;
             }
 
-            if (sh_data->remove_pss_symbol) {
+            if (sh_data->remove_pss_symbol)
                 remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
-            }
 
-            if (sh_data->schmiddle_sync) {
+            if (sh_data->schmiddle_sync)
+            {
                 remove_cp(rx_complex_remove_pss, sh_data->cyclic_prefex, sh_data->subcarrier, rx_complex_remove_cp);
                 decode(rx_complex_remove_cp, sh_data->subcarrier, rx_complex_fft);
-                for (size_t i = 0; i < rx_complex_fft.size(); ++i) {
+                for (size_t i = 0; i < rx_complex_fft.size(); ++i)
+                {
                     sh_data->rx_complex_fft_gui[i] = rx_complex_fft[i];
-
                 }
             }
 
@@ -319,18 +302,29 @@ void run_gui(sharedData *sh_data)
     ImPlot::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     ImGuiStyle &style = ImGui::GetStyle();
-    style.WindowRounding = 10.f;
-    style.FrameRounding = 8.f;
-    style.ChildRounding = 8.f;
-    style.ScrollbarRounding = 10.f;
-    style.TabRounding = 8.f;
+    int wind_pad_x = 2;
+    int wind_pad_y = 2;
+    int frame_pad_x = 5;
+    int frame_pad_y = 4;
+    int item_space_x = 10;
+    int item_space_y = 6;
+    int item_space_x_inn = 2;
+    int item_space_y_inn = 4;
+
+    style.WindowRounding = 0.f;
     style.WindowBorderSize = 0.0f;
-    style.FrameBorderSize = 0.0f;
+    style.WindowPadding = ImVec2(wind_pad_x, wind_pad_y);
+
+    style.FrameRounding = 3.f;
+    style.FrameBorderSize = 1.0f;
+    style.FramePadding = ImVec2(frame_pad_x, frame_pad_y);
+
+    style.ChildRounding = 0.f;
+    style.ScrollbarRounding = 0.f;
+    style.TabRounding = 0.f;
     style.PopupBorderSize = 0.0f;
-    style.WindowPadding = ImVec2(10, 10);
-    style.FramePadding = ImVec2(4, 4);
-    style.ItemSpacing = ImVec2(8, 8);
-    style.ItemInnerSpacing = ImVec2(4, 4);
+    style.ItemSpacing = ImVec2(item_space_x, item_space_y);
+    style.ItemInnerSpacing = ImVec2(item_space_x_inn, item_space_y_inn);
 
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
@@ -351,88 +345,102 @@ void run_gui(sharedData *sh_data)
                 running = false;
             }
         }
-
+        
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
+        
+        if (ImGui::Begin("Scatter Raw"))
+        {
+            if (ImPlot::BeginPlot("Raw Samples"))
+            {
+                ImPlot::PlotScatter("I/Q",
+                                    reinterpret_cast<double *>(sh_data->rx_complex.data()),
+                                    reinterpret_cast<double *>(sh_data->rx_complex.data()) + 1,
+                                    sh_data->rx_complex.size(), 0, 0, sizeof(std::complex<double>));
+                ImPlot::EndPlot();
+            }
+        }
+        ImGui::End();
 
-        ImGui::Begin("Signal Workspace", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        ImVec2 size = ImGui::GetContentRegionAvail();
-        float quoter_w = size.x * 0.25f;
-        float quoter_h = size.y * 0.33f;
-        float tr_quoter_w = size.x * 0.75f;
+        if (ImGui::Begin("Scatter FFT"))
+        {
+            if (ImPlot::BeginPlot("Samples After FFT"))
+            {
+                ImPlot::PlotScatter("I/Q",
+                                    reinterpret_cast<double *>(sh_data->rx_complex_fft_gui.data()),
+                                    reinterpret_cast<double *>(sh_data->rx_complex_fft_gui.data()) + 1,
+                                    sh_data->rx_complex_fft_gui.size(), 0, 0, sizeof(std::complex<double>));
+                ImPlot::EndPlot();
+            }
+        }
+        ImGui::End();
 
-        ImGui::BeginChild("Constellation Diagram", ImVec2(quoter_w, quoter_h), true);
-        if (ImPlot::BeginPlot("Constellation Diagram"))
+        if (ImGui::Begin("Plot Raw"))
         {
-            ImPlot::PlotScatter("I/Q",
-                                reinterpret_cast<double *>(sh_data->rx_complex.data()),
-                                reinterpret_cast<double *>(sh_data->rx_complex.data()) + 1,
-                                sh_data->rx_complex.size(), 0, 0, sizeof(std::complex<double>));
-            ImPlot::EndPlot();
+            if (ImPlot::BeginPlot("Raw I/Q samples"))
+            {
+                ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex.data()), sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+                ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex.data()) + 1, sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+                ImPlot::EndPlot();
+            }
         }
-        ImGui::EndChild();
-        ImGui::SameLine();
-        ImGui::BeginChild("I/Q samples", ImVec2(tr_quoter_w, quoter_h), true);
-        if (ImPlot::BeginPlot("I/Q samples"))
+        ImGui::End();
+
+        if (ImGui::Begin("Plot FFT"))
         {
-            ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex.data()), sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
-            ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex.data()) + 1, sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
-            ImPlot::EndPlot();
+            if (ImPlot::BeginPlot("I/Q Samples After FFT"))
+            {
+                ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()), sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+                ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()) + 1, sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+                ImPlot::EndPlot();
+            }
         }
-        ImGui::EndChild();
-        ImGui::BeginChild("Constellation Diagram After FFT", ImVec2(quoter_w, quoter_h), true);
-        if (ImPlot::BeginPlot("Constellation Diagram After FFT"))
+        ImGui::End();
+
+        if (ImGui::Begin("M Corr"))
         {
-            ImPlot::PlotScatter("I/Q",
-                                reinterpret_cast<double *>(sh_data->rx_complex_fft_gui.data()),
-                                reinterpret_cast<double *>(sh_data->rx_complex_fft_gui.data()) + 1,
-                                sh_data->rx_complex_fft_gui.size(), 0, 0, sizeof(std::complex<double>));
-            ImPlot::EndPlot();
+            if (ImPlot::BeginPlot("M Correlation Array"))
+            {
+                ImPlot::PlotLine("Correlation Array", sh_data->M_arra.data(), sh_data->M_arra.size());
+                ImPlot::EndPlot();
+            }
         }
-        ImGui::EndChild();
-        ImGui::SameLine();
-        ImGui::BeginChild("I/Q Samples After FFT", ImVec2(tr_quoter_w, quoter_h), true);
-        if (ImPlot::BeginPlot("I/Q Samples After FFT"))
+        ImGui::End();
+
+        if (ImGui::Begin("Magnitude"))
         {
-            ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()), sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
-            ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()) + 1, sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
-            ImPlot::EndPlot();
-        }
-        ImGui::EndChild();
-        // ImGui::BeginChild("M Array", ImVec2(size.x, quoter_h), true);
-        // if (ImPlot::BeginPlot("M Array"))
-        // {
-        //     ImPlot::PlotLine("M Array", sh_data->M_arra.data(), sh_data->M_arra.size());
-        //     ImPlot::EndPlot();
-        // }
-        // ImGui::EndChild();
-        ImGui::BeginChild("Magnitude", ImVec2(size.x, quoter_h), true);
-            if (ImPlot::BeginPlot("Magnitude")) {
+            if (ImPlot::BeginPlot("Signal Magnitude"))
+            {
                 ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
                 ImPlot::EndPlot();
             }
-        ImGui::EndChild();
+        }
         ImGui::End();
 
-        ImGui::Begin("Settings");
-        ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
-        if (ImGui::BeginTabBar("Control Panel"))
+        if (ImGui::Begin("Argument"))
         {
-            if (ImGui::BeginTabItem("Config"))
+            if (ImPlot::BeginPlot("Signal Argument"))
             {
+                ImPlot::PlotLine("Argument", sh_data->frequency_axis.data(), sh_data->argument.data(), sh_data->argument.size());
+                ImPlot::EndPlot();
+            }
+        }
+        ImGui::End();
 
+        if (ImGui::BeginMainMenuBar())
+        {
+            if (ImGui::BeginMenu("Control Panel"))
+            {
                 ImGui::SeparatorText("Processing Blocks");
 
-                const char *label_time = sh_data->changed_cont_time ? "Running" : "Stopped";
-                if (ImGui::Button(label_time))
+                const char *label_time = sh_data->changed_cont_time ? "Programm | Running" : "Programm | Stopped";
+                if (ImGui::Button(label_time, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->changed_cont_time = !sh_data->changed_cont_time;
 
-                ImGui::SameLine();
-
-                const char *mode = sh_data->changed_send ? "Transmission" : "Receiving";
-                if (ImGui::Button(mode))
+                const char *mode = sh_data->changed_send ? "SDR Mode | Transmission" : "SDR Mode | Receiving";
+                if (ImGui::Button(mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->changed_send = !sh_data->changed_send;
 
                 ImGui::Checkbox("PSS Symbols", &sh_data->changed_pss_symbols);
@@ -515,21 +523,17 @@ void run_gui(sharedData *sh_data)
                 }
 
                 if (ImGui::DragFloat("RX Gain", &sh_data->rx_gain, 0.25f, 0.f, 73.f))
-                {
                     sh_data->changed_rx_gain = true;
-                }
+
                 if (ImGui::DragFloat("TX Gain", &sh_data->tx_gain, 0.25f, 0.f, 89.f))
-                {
                     sh_data->changed_tx_gain = true;
-                }
+
                 if (ImGui::InputDouble("RX Frequency", &sh_data->rx_frequency, 1e2, 1e3))
-                {
                     sh_data->changed_rx_freq = true;
-                }
+
                 if (ImGui::InputDouble("TX Frequency", &sh_data->tx_frequency, 1e2, 1e3))
-                {
                     sh_data->changed_tx_freq = true;
-                }
+
                 if (ImGui::SliderInt("RX Bandwidth", &cur_rx_bandwidth, 0, bandwidths.size() - 1, std::to_string(bandwidths[cur_rx_bandwidth]).c_str()))
                 {
                     sh_data->rx_bandwidth = bandwidths[cur_rx_bandwidth];
@@ -540,14 +544,14 @@ void run_gui(sharedData *sh_data)
                     sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];
                     sh_data->changed_tx_bandwidth = true;
                 }
+
                 if (ImGui::InputDouble("Sample Rate", &sh_data->sample_rate, 1e5, 1e6))
-                {
                     sh_data->changed_sample_rate = true;
-                }
-                ImGui::EndTabItem();
+
+                ImGui::EndMenu();
             }
 
-            if (ImGui::BeginTabItem("View"))
+            if (ImGui::BeginMenu("View"))
             {
                 ImGui::SeparatorText("Theme Colors");
                 if (ImGui::Button("Light Theme"))
@@ -558,11 +562,49 @@ void run_gui(sharedData *sh_data)
                 ImGui::SameLine();
                 if (ImGui::Button("Classic Theme"))
                     ImGui::StyleColorsClassic();
-                ImGui::EndTabItem();
+
+                ImGui::SeparatorText("Window Settings");
+                ImGui::InputFloat("Window Rounding", &style.WindowRounding, 1);
+                ImGui::InputFloat("Window Border Size", &style.WindowBorderSize, 1);
+                ImGui::InputInt("Window Padding X", &wind_pad_x, 1);
+                ImGui::InputInt("Window Padding Y", &wind_pad_y, 1);
+                style.WindowPadding = ImVec2(wind_pad_x, wind_pad_y);
+
+                ImGui::SeparatorText("Frame Settings");
+                ImGui::InputFloat("Frame Rounding", &style.FrameRounding, 1);
+                ImGui::InputFloat("Frame Border Size", &style.FrameBorderSize, 1);
+                ImGui::InputInt("Frame Padding X", &frame_pad_x, 1);
+                ImGui::InputInt("Frame Padding Y", &frame_pad_y, 1);
+                style.FramePadding = ImVec2(frame_pad_x, frame_pad_y);
+
+                ImGui::SeparatorText("Child Settings");
+                ImGui::InputFloat("Child Rounding", &style.ChildRounding, 1);
+
+                ImGui::SeparatorText("Scrollbar Settings");
+                ImGui::InputFloat("Scrollbar Rounding", &style.ScrollbarRounding, 1);
+
+                ImGui::SeparatorText("Tab Settings");
+                ImGui::InputFloat("Tab Rounding", &style.TabRounding, 1);
+
+                ImGui::SeparatorText("Popup Settings");
+                ImGui::InputFloat("Popup Border Size", &style.PopupBorderSize, 1);
+
+                ImGui::SeparatorText("Item Settings");
+                ImGui::InputInt("Item Spacing X", &item_space_x, 1);
+                ImGui::InputInt("Item Spacing Y", &item_space_y, 1);
+                style.ItemSpacing = ImVec2(item_space_x, item_space_y);
+
+                ImGui::SeparatorText("Item Inner Settings");
+                ImGui::InputInt("Item Inner Spacing X", &item_space_x_inn, 1);
+                ImGui::InputInt("Item Inner Spacing Y", &item_space_y_inn, 1);
+                style.ItemInnerSpacing = ImVec2(item_space_x_inn, item_space_y_inn);
+                ImGui::EndMenu();
             }
-            ImGui::EndTabBar();
+            float window_width = ImGui::GetWindowWidth();
+            ImGui::SameLine(window_width - ImGui::CalcTextSize("FPS: 0000 (0000.000 ms)").x);
+            ImGui::Text("FPS: %.f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+            ImGui::EndMainMenuBar();
         }
-        ImGui::End();
 
         // ImGui::ShowDemoWindow();
 
