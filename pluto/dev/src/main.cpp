@@ -258,8 +258,8 @@ void run_dsp(sharedData *sh_data)
                 schm_state = schmidl_sync(sh_data->rx_complex, sh_data->subcarrier);
                 sh_data->sync_pos = schm_state.M;
                 sh_data->M_arra = schm_state.M_arr;
-                sh_data->get_schmiddle_pos = false;
             }
+
 
             if (sh_data->remove_pss_symbol)
                 remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
@@ -446,7 +446,7 @@ void run_gui(sharedData *sh_data)
                 ImGui::Checkbox("PSS Symbols", &sh_data->changed_pss_symbols);
                 ImGui::SeparatorText("Schmiddle Cox");
                 if (ImGui::Button("Get Schmiddle Sync Pos"))
-                    sh_data->get_schmiddle_pos = true;
+                    sh_data->get_schmiddle_pos = !sh_data->get_schmiddle_pos;
                 ImGui::SameLine();
                 ImGui::Text(": %d", sh_data->sync_pos);
                 ImGui::InputInt("Sync Pos", &sh_data->sync_pos, 1, 1e1);
