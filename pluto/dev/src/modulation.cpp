@@ -102,18 +102,25 @@ void ifft(fftw_complex *in, fftw_complex *out, int N)
     fftw_destroy_plan(plan);
 }
 
-void build_pss_symbol(fftw_complex *in, fftw_complex *out, int subcarrier)
+void build_pss_zadoff_chu(fftw_complex *in, fftw_complex *out, int subcarrier, int u)
 {
     if (subcarrier <= 0)
         throw std::invalid_argument("subcarrier must be positive");
 
-    for (int i = 1; i < subcarrier; ++i)
+    for (int i = 0; i < subcarrier; ++i)
     {
-        if (i == subcarrier / 2)
-            continue;
-        double value = ((i % 2) == 0) ? 1.0 : 0.0;
-        in[i][0] = value;
+        in[i][0] = 0.0;
         in[i][1] = 0.0;
+    }
+
+    int N_zc = subcarrier / 2;
+
+    for (int n = 0; n < N_zc; ++n)
+    {
+        double phase = -M_PI * u * n * (n + 1) / N_zc;
+        int freq_idx = 2 * n + 1;
+        in[freq_idx][0] = cos(phase);
+        in[freq_idx][1] = sin(phase);
     }
 
     ifft(in, out, subcarrier);
@@ -238,7 +245,6 @@ schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subc
         M.push_back(static_cast<double>(std::norm(P) / std::norm(R)));
         if (M.back() > max_M)
         {
-            max_M = M.back();
             sch_s.M = n;
         }
 
@@ -253,40 +259,38 @@ schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subc
 void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<double>> &out_signal)
 {
     out_signal.clear();
+    out_signal.reserve(in_signal.size() - subcarrar - cp);
 
     if (pos == 0)
     {
-        out_signal.resize(in_signal.size() - cp - subcarrar, 0);
-        for (size_t i = 0; i < out_signal.size(); ++i)
-            out_signal[i] = in_signal[i + subcarrar];
+        for (size_t i = subcarrar; i < in_signal.size(); ++i)
+            out_signal.push_back(in_signal[i]);
         return;
     }
-    else if (pos > 0 && pos < subcarrar + cp)
-    {
-        out_signal.resize(in_signal.size() - 2 * (cp + subcarrar), 0);
-        for (size_t i = 0; i < out_signal.size(); ++i)
-        {
-            out_signal[i] = in_signal[i + pos + subcarrar];
-        }
-        return;
-    }
+
+    for (size_t i = pos + subcarrar; i < in_signal.size(); ++i)
+        out_signal.push_back(in_signal[i]);
 }
 
 void remove_cp(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, std::vector<std::complex<double>> &out_signal)
 {
+    out_signal.clear();
     size_t cnt_ofdm_symbols = in_signal.size() / (cp + subcarrar);
-    out_signal.resize(in_signal.size() - cp * cnt_ofdm_symbols);
-    for (size_t i = 0; i < in_signal.size() / (cp + subcarrar); ++i)
+    out_signal.reserve(in_signal.size() - cp * cnt_ofdm_symbols);
+
+    for (size_t i = 0; i < cnt_ofdm_symbols; ++i)
     {
         for (int j = 0; j < subcarrar; ++j)
         {
-            out_signal[j + (i * subcarrar)] = in_signal[j + (i * subcarrar) + cp + (i * cp)];
+            out_signal.push_back(in_signal[j + (i * subcarrar) + cp + (i * cp)]);
         }
     }
 }
 
 void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::vector<std::complex<double>> &out_signal)
 {
+    out_signal.clear();
+    out_signal.reserve(in_signal.size());
     fftw_complex *in_fft = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * subcarrar));
     fftw_complex *out_fft = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * subcarrar));
 
@@ -302,7 +306,7 @@ void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::ve
 
         for (int k = 0; k < subcarrar; ++k)
         {
-            out_signal[k + (i * subcarrar)] = std::complex(out_fft[k][0], out_fft[k][1]);
+            out_signal.push_back(std::complex(out_fft[k][0], out_fft[k][1]));
         }
     }
     fftw_free(in_fft);

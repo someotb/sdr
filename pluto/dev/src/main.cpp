@@ -74,6 +74,7 @@ struct sharedData
     int sync_pos = 0;
     int mtu = 1920;
     int buffer = 3840;
+    int zadoff_chu_u = 3;
 
     sharedData(size_t rx_mtu)
     {
@@ -207,10 +208,12 @@ void run_dsp(sharedData *sh_data)
         sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
     }
 
+    int ofdm_symbol = sh_data->subcarrier + sh_data->cyclic_prefex;
     std::deque<int> bit_fifo;
-    std::vector<std::complex<double>> rx_complex_remove_pss(sh_data->mtu, 0);
-    std::vector<std::complex<double>> rx_complex_remove_cp(sh_data->mtu, 0);
-    std::vector<std::complex<double>> rx_complex_fft(sh_data->mtu, 0);
+
+    std::vector<std::complex<double>> rx_complex_remove_pss;
+    std::vector<std::complex<double>> rx_complex_remove_cp;
+    std::vector<std::complex<double>> rx_complex_fft;
 
     while (bit_fifo.size() < 1)
         bit_fifo.push_back(rand() & 1);
@@ -227,10 +230,10 @@ void run_dsp(sharedData *sh_data)
         {
             if (sh_data->changed_pss_symbols)
             {
-                build_pss_symbol(in_build_ofdm, out_build_ofdm, sh_data->subcarrier);
+                build_pss_zadoff_chu(in_build_ofdm, out_build_ofdm, sh_data->subcarrier, sh_data->zadoff_chu_u);
                 append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, 0);
 
-                for (int start = 2 * (sh_data->subcarrier + sh_data->cyclic_prefex); start < (sh_data->buffer - sh_data->subcarrier + sh_data->cyclic_prefex); start += 2 * (sh_data->subcarrier + sh_data->cyclic_prefex))
+                for (int start = 2 * (ofdm_symbol); start < (sh_data->buffer - ofdm_symbol); start += 2 * (ofdm_symbol))
                 {
                     build_ofdm_symbol(bit_fifo, in_build_ofdm, out_build_ofdm, sh_data->modul_type_TX, sh_data->subcarrier);
                     append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, start);
@@ -258,21 +261,16 @@ void run_dsp(sharedData *sh_data)
                 schm_state = schmidl_sync(sh_data->rx_complex, sh_data->subcarrier);
                 sh_data->sync_pos = schm_state.M;
                 sh_data->M_arra = schm_state.M_arr;
+                sh_data->get_schmiddle_pos = false;
             }
 
+            remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
+            remove_cp(rx_complex_remove_pss, sh_data->cyclic_prefex, sh_data->subcarrier, rx_complex_remove_cp);
+            decode(rx_complex_remove_cp, sh_data->subcarrier, rx_complex_fft);
 
-            if (sh_data->remove_pss_symbol)
-                remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
-
-            if (sh_data->schmiddle_sync)
-            {
-                remove_cp(rx_complex_remove_pss, sh_data->cyclic_prefex, sh_data->subcarrier, rx_complex_remove_cp);
-                decode(rx_complex_remove_cp, sh_data->subcarrier, rx_complex_fft);
-                for (size_t i = 0; i < rx_complex_fft.size(); ++i)
-                {
-                    sh_data->rx_complex_fft_gui[i] = rx_complex_fft[i];
-                }
-            }
+            sh_data->rx_complex_fft_gui.clear();
+            for (size_t i = 0; i < rx_complex_fft.size(); ++i)
+                sh_data->rx_complex_fft_gui.push_back(rx_complex_fft[i]);
 
             spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument);
 
