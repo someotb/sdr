@@ -21,7 +21,6 @@ std::complex<double> map_symbol(std::deque<int> &fifo, ModulationType mod)
     case ModulationType::BPSK:
     {
         int b = fifo.front();
-        fifo.push_back(b);
         fifo.pop_front();
         double v = (1.0 - 2.0 * b);
         return {v, 0.0};
@@ -30,10 +29,8 @@ std::complex<double> map_symbol(std::deque<int> &fifo, ModulationType mod)
     case ModulationType::QPSK:
     {
         int b0 = fifo.front();
-        fifo.push_back(b0);
         fifo.pop_front();
         int b1 = fifo.front();
-        fifo.push_back(b1);
         fifo.pop_front();
 
         double real = (1.0 - 2.0 * b0);
@@ -45,16 +42,12 @@ std::complex<double> map_symbol(std::deque<int> &fifo, ModulationType mod)
     case ModulationType::QAM16:
     {
         int b0 = fifo.front();
-        fifo.push_back(b0);
         fifo.pop_front();
         int b1 = fifo.front();
-        fifo.push_back(b1);
         fifo.pop_front();
         int b2 = fifo.front();
-        fifo.push_back(b2);
         fifo.pop_front();
         int b3 = fifo.front();
-        fifo.push_back(b3);
         fifo.pop_front();
 
         double real = (1 - 2 * b0) * (2 - (1 - 2 * b2));
@@ -129,21 +122,23 @@ void build_pss_zadoff_chu(fftw_complex *in, fftw_complex *out, int subcarrier, i
 void build_ofdm_symbol(std::deque<int> &bit_fifo, fftw_complex *in, fftw_complex *out, ModulationType mod, int subcarrier)
 {
     size_t needed = subcarrier * bits_per_symbol(mod);
+    std::deque<int> pilots = {1, -1, 1, 1, -1, 1, -1, -1};
 
     while (bit_fifo.size() < needed)
         bit_fifo.push_back(rand() & 1);
 
     for (int k = 0; k < subcarrier; ++k)
     {
-        if (k > subcarrier / 2 - 28 && k < subcarrier / 2)
+        if (k > subcarrier / 2 - 28 && k < subcarrier / 2 + 27)
         {
             in[k][0] = 0;
             in[k][1] = 0;
         }
-        else if (k > subcarrier / 2 && k < subcarrier / 2 + 27)
+        else if (k == 5 || k == 15 || k == 25 || k == 35 || k == 92 || k == 102 || k == 112 || k == 122)
         {
-            in[k][0] = 0;
-            in[k][1] = 0;
+            // auto s = map_symbol(pilots, ModulationType::BPSK);
+            in[k][0] = 1.0;
+            in[k][1] = 0.0;
         }
         else if (k == 0)
         {
@@ -312,4 +307,32 @@ void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::ve
     }
     fftw_free(in_fft);
     fftw_free(out_fft);
+}
+
+void equalization(std::vector<std::complex<double>> &in_signal, int subcarrar)
+{
+    int num_symbols = in_signal.size() / subcarrar;
+    std::vector<std::complex<double>> pilot_vals;
+    std::deque<int> pilots = {1, -1, 1, 1, -1, 1, -1, -1};
+    std::vector<int> pilot_idxs = {5, 15, 25, 35, 92, 102, 112, 122};
+
+    for (size_t i = 0; i < pilots.size(); ++i)
+        pilot_vals.push_back({1.0, 0.0});
+
+    for (int i = 0; i < num_symbols; ++i)
+    {
+        double symbols_phase = 0;
+        int offset = i * subcarrar;
+        for (size_t j = 0; j < pilot_idxs.size(); ++j)
+        {
+            int pilot_idx = pilot_idxs[j];
+            std::complex<double> rx_pilot = in_signal[offset + pilot_idx];
+            symbols_phase += std::arg(rx_pilot * std::conj(pilot_vals[j]));
+        }
+
+        double avg_phase = symbols_phase / pilot_idxs.size();
+
+        for (int k = 0; k < subcarrar; ++k)
+            in_signal[offset + k] *= std::polar(1.0, -avg_phase);
+    }
 }

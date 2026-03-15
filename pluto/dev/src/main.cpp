@@ -34,7 +34,6 @@ constexpr long long TX_DELAY = 4000000;
 struct sharedData
 {
     ModulationType modul_type_TX = ModulationType::QPSK;
-    ModulationType modul_type_RX = ModulationType::QPSK;
     std::string device;
     std::vector<std::string> devices;
     std::vector<std::complex<double>> rx_complex;
@@ -44,6 +43,7 @@ struct sharedData
     std::vector<double> argument;
     std::vector<double> frequency_axis;
     std::vector<double> M_arra;
+    std::vector<double> milisecs;
     std::atomic<bool> form = true;
     std::atomic<bool> read = false;
     std::atomic<bool> dsp = false;
@@ -61,6 +61,7 @@ struct sharedData
     bool changed_cont_time = true;
     bool get_zadoff_pos_loopback = false;
     bool get_zadoff_pos = false;
+    bool debug = false;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
     double rx_frequency = 777e6;
@@ -263,6 +264,7 @@ void run_dsp(sharedData *sh_data)
         }
         if (sh_data->dsp)
         {
+            auto start = std::chrono::steady_clock::now();
             if (sh_data->get_zadoff_pos_loopback)
             {
                 zadoff_state = zadoff_sync(sh_data->rx_complex, zadoff_chu_seq);
@@ -281,12 +283,21 @@ void run_dsp(sharedData *sh_data)
             remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
             remove_cp(rx_complex_remove_pss, sh_data->cyclic_prefex, sh_data->subcarrier, rx_complex_remove_cp);
             decode(rx_complex_remove_cp, sh_data->subcarrier, rx_complex_fft);
+            equalization(rx_complex_fft, sh_data->subcarrier);
+            spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument);
 
+            auto end = std::chrono::steady_clock::now();
+
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            if (sh_data->debug)
+            {
+                sh_data->milisecs.push_back(duration.count() / 1e3);
+                if (sh_data->milisecs.size() == 1920)
+                    sh_data->milisecs.erase(sh_data->milisecs.begin());
+            }
             sh_data->rx_complex_fft_gui.clear();
             for (size_t i = 0; i < rx_complex_fft.size(); ++i)
                 sh_data->rx_complex_fft_gui.push_back(rx_complex_fft[i]);
-
-            spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument);
 
             sh_data->dsp = false;
             sh_data->form = true;
@@ -441,6 +452,19 @@ void run_gui(sharedData *sh_data)
         }
         ImGui::End();
 
+        if (sh_data->debug)
+        {
+            if (ImGui::Begin("Debug"))
+            {
+                if (ImPlot::BeginPlot("Latency"))
+                {
+                    ImPlot::PlotLine("Latency", sh_data->milisecs.data(), sh_data->milisecs.size());
+                    ImPlot::EndPlot();
+                }
+            }
+            ImGui::End();
+        }
+
         if (ImGui::BeginMainMenuBar())
         {
             if (ImGui::BeginMenu("Control Panel"))
@@ -451,6 +475,7 @@ void run_gui(sharedData *sh_data)
                 const char *sdr_mode = sh_data->changed_send ? "SDR Mode | Transmission" : "SDR Mode | Receiving";
                 const char *pss_mode = sh_data->changed_pss_symbols ? "PSS Symbol [ON]" : "PSS Symbol [OFF]";
                 const char *zadoff_chu = sh_data->get_zadoff_pos ? "Direct Mode [ON]" : "Direct Mode [OFF]";
+                const char *debug_mode = sh_data->debug ? "Debug Mode [ON]" : "Debug Mode [OFF]";
 
                 if (ImGui::Button(label_time, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->changed_cont_time = !sh_data->changed_cont_time;
@@ -460,6 +485,10 @@ void run_gui(sharedData *sh_data)
 
                 if (ImGui::Button(pss_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->changed_pss_symbols = !sh_data->changed_pss_symbols;
+
+                ImGui::SeparatorText("Debug");
+                if (ImGui::Button(debug_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
+                    sh_data->debug = !sh_data->debug;
 
                 ImGui::SeparatorText("ZadOff-Chu");
                 if (ImGui::Button("Loopback Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
