@@ -59,9 +59,8 @@ struct sharedData
     bool changed_modulation_type = false;
     bool changed_pss_symbols = false;
     bool changed_cont_time = true;
-    bool get_schmiddle_pos = false;
-    bool remove_pss_symbol = false;
-    bool schmiddle_sync = false;
+    bool get_zadoff_pos_loopback = false;
+    bool get_zadoff_pos = false;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
     double rx_frequency = 777e6;
@@ -123,22 +122,23 @@ void run_backend(sharedData *sh_data)
             int flags = 0;
             long long timeNs = 0;
 
-            size_t sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
-            if (sr != sdr.tx_mtu)
+            int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
+            if (sr != sh_data->mtu)
                 std::cout << "[ERROR] Read stream | Error code: " << sr << "\n";
-
-            for (int i = 0; i < sh_data->mtu; ++i)
-                sh_data->rx_complex[i] = std::complex<double>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
 
             long long tx_time = timeNs + TX_DELAY;
             flags = SOAPY_SDR_HAS_TIME;
 
             if (sh_data->changed_send)
             {
-                size_t st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
-                if (st != sdr.tx_mtu)
+                int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
+                if (st != sh_data->mtu)
                     std::cout << "[ERROR] Write stream | Error code: " << st << "\n";
             }
+
+            for (int i = 0; i < sh_data->mtu; ++i)
+                sh_data->rx_complex[i] = std::complex<double>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
+
             sh_data->read = false;
             sh_data->dsp = true;
         }
@@ -198,7 +198,7 @@ void run_backend(sharedData *sh_data)
 
 void run_dsp(sharedData *sh_data)
 {
-    schmiddle_state schm_state;
+    zadoff_chu_state zadoff_state;
 
     fftw_complex *in_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
     fftw_complex *out_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
@@ -210,10 +210,12 @@ void run_dsp(sharedData *sh_data)
 
     int ofdm_symbol = sh_data->subcarrier + sh_data->cyclic_prefex;
     std::deque<int> bit_fifo;
-
+    std::vector<int16_t> zadoff_chu_seq((sh_data->subcarrier + sh_data->cyclic_prefex) * 2);
     std::vector<std::complex<double>> rx_complex_remove_pss;
     std::vector<std::complex<double>> rx_complex_remove_cp;
     std::vector<std::complex<double>> rx_complex_fft;
+
+    bool zad_off_generate = true;
 
     while (bit_fifo.size() < 1)
         bit_fifo.push_back(rand() & 1);
@@ -231,6 +233,11 @@ void run_dsp(sharedData *sh_data)
             if (sh_data->changed_pss_symbols)
             {
                 build_pss_zadoff_chu(in_build_ofdm, out_build_ofdm, sh_data->subcarrier, sh_data->zadoff_chu_u);
+                if (zad_off_generate)
+                {
+                    append_symbol(out_build_ofdm, zadoff_chu_seq, sh_data->subcarrier, sh_data->cyclic_prefex, 0);
+                    zad_off_generate = false;
+                }
                 append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, 0);
 
                 for (int start = 2 * (ofdm_symbol); start < (sh_data->buffer - ofdm_symbol); start += 2 * (ofdm_symbol))
@@ -256,12 +263,19 @@ void run_dsp(sharedData *sh_data)
         }
         if (sh_data->dsp)
         {
-            if (sh_data->get_schmiddle_pos)
+            if (sh_data->get_zadoff_pos_loopback)
             {
-                schm_state = schmidl_sync(sh_data->rx_complex, sh_data->subcarrier);
-                sh_data->sync_pos = schm_state.M;
-                sh_data->M_arra = schm_state.M_arr;
-                sh_data->get_schmiddle_pos = false;
+                zadoff_state = zadoff_sync(sh_data->rx_complex, zadoff_chu_seq);
+                sh_data->sync_pos = zadoff_state.index;
+                sh_data->M_arra = zadoff_state.index_arr;
+                sh_data->get_zadoff_pos_loopback = false;
+            }
+
+            if (sh_data->get_zadoff_pos)
+            {
+                zadoff_state = zadoff_sync(sh_data->rx_complex, zadoff_chu_seq);
+                sh_data->sync_pos = zadoff_state.index;
+                sh_data->M_arra = zadoff_state.index_arr;
             }
 
             remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
@@ -291,7 +305,7 @@ void run_gui(sharedData *sh_data)
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     SDL_Window *window = SDL_CreateWindow(
-        "Backend start", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        "GUI", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_SetSwapInterval(0);
@@ -343,12 +357,12 @@ void run_gui(sharedData *sh_data)
                 running = false;
             }
         }
-        
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
-        
+
         if (ImGui::Begin("Scatter Raw"))
         {
             if (ImPlot::BeginPlot("Raw Samples"))
@@ -434,64 +448,46 @@ void run_gui(sharedData *sh_data)
                 ImGui::SeparatorText("Processing Blocks");
 
                 const char *label_time = sh_data->changed_cont_time ? "Programm | Running" : "Programm | Stopped";
+                const char *sdr_mode = sh_data->changed_send ? "SDR Mode | Transmission" : "SDR Mode | Receiving";
+                const char *pss_mode = sh_data->changed_pss_symbols ? "PSS Symbol [ON]" : "PSS Symbol [OFF]";
+                const char *zadoff_chu = sh_data->get_zadoff_pos ? "Direct Mode [ON]" : "Direct Mode [OFF]";
+
                 if (ImGui::Button(label_time, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->changed_cont_time = !sh_data->changed_cont_time;
 
-                const char *mode = sh_data->changed_send ? "SDR Mode | Transmission" : "SDR Mode | Receiving";
-                if (ImGui::Button(mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
+                if (ImGui::Button(sdr_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->changed_send = !sh_data->changed_send;
 
-                ImGui::Checkbox("PSS Symbols", &sh_data->changed_pss_symbols);
-                ImGui::SeparatorText("Schmiddle Cox");
-                if (ImGui::Button("Get Schmiddle Sync Pos"))
-                    sh_data->get_schmiddle_pos = !sh_data->get_schmiddle_pos;
+                if (ImGui::Button(pss_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
+                    sh_data->changed_pss_symbols = !sh_data->changed_pss_symbols;
+
+                ImGui::SeparatorText("ZadOff-Chu");
+                if (ImGui::Button("Loopback Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
+                    sh_data->get_zadoff_pos_loopback = !sh_data->get_zadoff_pos_loopback;
+                if (ImGui::Button(zadoff_chu, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
+                    sh_data->get_zadoff_pos = !sh_data->get_zadoff_pos;
+                ImGui::InputInt("##Sync Pos", &sh_data->sync_pos, 1, 1e1);
                 ImGui::SameLine();
-                ImGui::Text(": %d", sh_data->sync_pos);
-                ImGui::InputInt("Sync Pos", &sh_data->sync_pos, 1, 1e1);
-                ImGui::Checkbox("Remove PSS", &sh_data->remove_pss_symbol);
-                ImGui::Checkbox("Schmiddle Cox Sync", &sh_data->schmiddle_sync);
+                ImGui::Text("| ZadOff-Chu Sync Pos");
 
                 ImGui::SeparatorText("Pre Modulation");
-                const char *rx_mod_type = nullptr;
-                const char *tx_mod_type = nullptr;
+                const char *modulation_type = nullptr;
 
-                switch (sh_data->modul_type_RX)
-                {
-                case ModulationType::BPSK:
-                    rx_mod_type = "RX Modulation BPSK";
-                    break;
-                case ModulationType::QPSK:
-                    rx_mod_type = "RX Modulation QPSK";
-                    break;
-                case ModulationType::QAM16:
-                    rx_mod_type = "RX Modulation QAM16";
-                    break;
-                }
                 switch (sh_data->modul_type_TX)
                 {
                 case ModulationType::BPSK:
-                    tx_mod_type = "TX Modulation BPSK";
+                    modulation_type = "Modulation: BPSK";
                     break;
                 case ModulationType::QPSK:
-                    tx_mod_type = "TX Modulation QPSK";
+                    modulation_type = "Modulation: QPSK";
                     break;
                 case ModulationType::QAM16:
-                    tx_mod_type = "TX Modulation QAM16";
+                    modulation_type = "Modulation: QAM16";
                     break;
                 }
 
-                if (ImGui::BeginCombo("RX Modulation Type", rx_mod_type))
-                {
-                    if (ImGui::Selectable("BPSK", sh_data->modul_type_RX == ModulationType::BPSK))
-                        sh_data->modul_type_RX = ModulationType::BPSK;
-                    if (ImGui::Selectable("QPSK", sh_data->modul_type_RX == ModulationType::QPSK))
-                        sh_data->modul_type_RX = ModulationType::QPSK;
-                    if (ImGui::Selectable("QAM16", sh_data->modul_type_RX == ModulationType::QAM16))
-                        sh_data->modul_type_RX = ModulationType::QAM16;
-                    ImGui::EndCombo();
-                }
-
-                if (ImGui::BeginCombo("TX Modulation Type", tx_mod_type))
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::BeginCombo("##Modulation Type", modulation_type))
                 {
                     if (ImGui::Selectable("BPSK", sh_data->modul_type_TX == ModulationType::BPSK))
                         sh_data->modul_type_TX = ModulationType::BPSK;
@@ -504,10 +500,10 @@ void run_gui(sharedData *sh_data)
 
                 ImGui::InputInt("Cycle Prefix", &sh_data->cyclic_prefex, 1);
                 ImGui::InputInt("Subcarrier", &sh_data->subcarrier, 1);
-
                 ImGui::SeparatorText("SDR Configuration");
 
-                if (ImGui::BeginCombo("SDR Device", sh_data->device.c_str()))
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::BeginCombo("##SDR Device", sh_data->device.c_str()))
                 {
                     for (const auto &dev : sh_data->devices)
                     {
@@ -537,6 +533,7 @@ void run_gui(sharedData *sh_data)
                     sh_data->rx_bandwidth = bandwidths[cur_rx_bandwidth];
                     sh_data->changed_rx_bandwidth = true;
                 }
+
                 if (ImGui::SliderInt("TX Bandwidth", &cur_tx_bandwidth, 0, bandwidths.size() - 1, std::to_string(bandwidths[cur_tx_bandwidth]).c_str()))
                 {
                     sh_data->tx_bandwidth = bandwidths[cur_tx_bandwidth];

@@ -223,37 +223,38 @@ void spectrum(std::vector<std::complex<double>> &in_signal, std::vector<double> 
     fftw_free(out_spectre);
 }
 
-schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subcarriers)
+zadoff_chu_state zadoff_sync(std::vector<std::complex<double>> &signal, std::vector<int16_t> &zadoff_chu_seq)
 {
     if (signal.size() == 0)
-        return schmiddle_state{};
+        return zadoff_chu_state{};
 
-    schmiddle_state sch_s;
-    double max_M = 0;
-    std::vector<double> M;
-    std::complex<double> P = 0;
-    std::complex<double> R = 0;
+    std::vector<std::complex<double>> zadoff_chu_compl;
+    for (size_t i = 0; i < zadoff_chu_seq.size() / 2; ++i)
+        zadoff_chu_compl.push_back(std::complex<double>(static_cast<double>(zadoff_chu_seq[2 * i]), static_cast<double>(zadoff_chu_seq[2 * i + 1])));
 
-    for (size_t n = 0; n < signal.size() - subcarriers - 1; ++n)
+    zadoff_chu_state zadoff_c;
+    double max_norm = 0.0;
+    int best_idx = 0;
+
+    for (size_t n = 0; n < signal.size() - zadoff_chu_compl.size(); ++n)
     {
-        for (int k = 0; k < subcarriers / 2; ++k)
+        std::complex<double> sum = {0.0, 0.0};
+        for (size_t k = 0; k < zadoff_chu_compl.size(); ++k)
+            sum += signal[n + k] * std::conj(zadoff_chu_compl[k]);
+
+        double cur_norm = std::norm(sum);
+        zadoff_c.index_arr.push_back(cur_norm);
+        if (cur_norm > max_norm)
         {
-            P += std::conj(signal[n + k]) * signal[n + k + subcarriers / 2];
-            R += std::norm(signal[n + k + subcarriers / 2]);
+            max_norm = cur_norm;
+            best_idx = n;
         }
-
-        M.push_back(static_cast<double>(std::norm(P) / std::norm(R)));
-        if (M.back() > max_M)
-        {
-            sch_s.M = n;
-        }
-
-        sch_s.M_arr = M;
-
-        if (M.size() > 1920)
-            M.clear();
+        if (zadoff_c.index_arr.size() >= 1920)
+            zadoff_c.index_arr.clear();
     }
-    return sch_s;
+
+    zadoff_c.index = best_idx;
+    return zadoff_c;
 }
 
 void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<double>> &out_signal)

@@ -14,10 +14,10 @@ enum class ModulationType
     QAM16
 };
 
-struct schmiddle_state
+struct zadoff_chu_state
 {
-    int M = 0;
-    std::vector<double> M_arr;
+    int index = 0;
+    std::vector<double> index_arr;
 };
 
 /**
@@ -44,7 +44,7 @@ void append_symbol(fftw_complex *out, std::vector<int16_t> &tx, int subcarrier, 
 
 void spectrum(std::vector<std::complex<double>> &in_signal, std::vector<double> &shifted_magnitude, std::vector<double> &argument);
 
-schmiddle_state schmidl_sync(std::vector<std::complex<double>> &signal, int subcarriers);
+zadoff_chu_state zadoff_sync(std::vector<std::complex<double>> &signal, std::vector<int16_t> &zadoff_chu_seq);
 
 void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<double>> &out_signal);
 
