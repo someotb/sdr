@@ -42,8 +42,9 @@ struct sharedData
     std::vector<double> shifted_magnitude;
     std::vector<double> argument;
     std::vector<double> frequency_axis;
-    std::vector<double> M_arra;
+    std::vector<double> zadoff_corr_arr;
     std::vector<double> milisecs;
+    std::vector<double> cfo_offset;
     std::atomic<bool> form = true;
     std::atomic<bool> read = false;
     std::atomic<bool> dsp = false;
@@ -62,6 +63,8 @@ struct sharedData
     bool get_zadoff_pos_loopback = false;
     bool get_zadoff_pos = false;
     bool debug = false;
+    bool cfo_cor = false;
+    bool equal = false;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
     double rx_frequency = 777e6;
@@ -80,7 +83,7 @@ struct sharedData
     {
         tx_buffer.resize(rx_mtu * 2, 0);
         rx_complex.resize(rx_mtu, 0);
-        M_arra.resize(rx_mtu, 0);
+        zadoff_corr_arr.resize(rx_mtu, 0);
         rx_complex_fft_gui.resize(rx_mtu, 0);
         shifted_magnitude.resize(rx_mtu, 0);
         argument.resize(rx_mtu, 0);
@@ -269,7 +272,7 @@ void run_dsp(sharedData *sh_data)
             {
                 zadoff_state = zadoff_sync(sh_data->rx_complex, zadoff_chu_seq);
                 sh_data->sync_pos = zadoff_state.index;
-                sh_data->M_arra = zadoff_state.index_arr;
+                sh_data->zadoff_corr_arr = zadoff_state.index_arr;
                 sh_data->get_zadoff_pos_loopback = false;
             }
 
@@ -277,13 +280,21 @@ void run_dsp(sharedData *sh_data)
             {
                 zadoff_state = zadoff_sync(sh_data->rx_complex, zadoff_chu_seq);
                 sh_data->sync_pos = zadoff_state.index;
-                sh_data->M_arra = zadoff_state.index_arr;
+                sh_data->zadoff_corr_arr = zadoff_state.index_arr;
             }
 
+            // Main DSP Module
             remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
+
+            if (sh_data->cfo_cor)
+                cfo_correction(rx_complex_remove_pss, sh_data->subcarrier, sh_data->cyclic_prefex, sh_data->cfo_offset);
+
             remove_cp(rx_complex_remove_pss, sh_data->cyclic_prefex, sh_data->subcarrier, rx_complex_remove_cp);
             decode(rx_complex_remove_cp, sh_data->subcarrier, rx_complex_fft);
-            equalization(rx_complex_fft, sh_data->subcarrier);
+
+            if (sh_data->equal)
+                equalization(rx_complex_fft, sh_data->subcarrier);
+
             spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument);
 
             auto end = std::chrono::steady_clock::now();
@@ -325,6 +336,7 @@ void run_gui(sharedData *sh_data)
     ImPlot::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     ImGuiStyle &style = ImGui::GetStyle();
+    ImPlotStyle &plt_style = ImPlot::GetStyle();
     int wind_pad_x = 2;
     int wind_pad_y = 2;
     int frame_pad_x = 5;
@@ -348,6 +360,16 @@ void run_gui(sharedData *sh_data)
     style.PopupBorderSize = 0.0f;
     style.ItemSpacing = ImVec2(item_space_x, item_space_y);
     style.ItemInnerSpacing = ImVec2(item_space_x_inn, item_space_y_inn);
+
+    static const ImVec4 plot_colors[2] = {
+        ImVec4(0.26f, 0.59f, 0.98f, 0.80f),
+        ImVec4(0.98f, 0.56f, 0.59f, 0.80f)};
+
+    ImPlot::AddColormap("PlotPalete", plot_colors, 2);
+
+    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.1f, 0.1f, 0.1f, 1.00f);
+    style.Colors[ImGuiCol_Border] = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
+    style.Colors[ImGuiCol_Text] = ImVec4(0.95f, 0.88f, 0.93f, 1.00f);
 
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
@@ -374,9 +396,10 @@ void run_gui(sharedData *sh_data)
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
 
+        ImPlot::PushColormap("PlotPalete");
         if (ImGui::Begin("Scatter Raw"))
         {
-            if (ImPlot::BeginPlot("Raw Samples"))
+            if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotScatter("I/Q",
                                     reinterpret_cast<double *>(sh_data->rx_complex.data()),
@@ -389,7 +412,7 @@ void run_gui(sharedData *sh_data)
 
         if (ImGui::Begin("Scatter FFT"))
         {
-            if (ImPlot::BeginPlot("Samples After FFT"))
+            if (ImPlot::BeginPlot("Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotScatter("I/Q",
                                     reinterpret_cast<double *>(sh_data->rx_complex_fft_gui.data()),
@@ -402,7 +425,7 @@ void run_gui(sharedData *sh_data)
 
         if (ImGui::Begin("Plot Raw"))
         {
-            if (ImPlot::BeginPlot("Raw I/Q samples"))
+            if (ImPlot::BeginPlot("Raw I/Q samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex.data()), sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
                 ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex.data()) + 1, sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
@@ -413,7 +436,7 @@ void run_gui(sharedData *sh_data)
 
         if (ImGui::Begin("Plot FFT"))
         {
-            if (ImPlot::BeginPlot("I/Q Samples After FFT"))
+            if (ImPlot::BeginPlot("I/Q Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()), sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
                 ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()) + 1, sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
@@ -422,19 +445,9 @@ void run_gui(sharedData *sh_data)
         }
         ImGui::End();
 
-        if (ImGui::Begin("M Corr"))
-        {
-            if (ImPlot::BeginPlot("M Correlation Array"))
-            {
-                ImPlot::PlotLine("Correlation Array", sh_data->M_arra.data(), sh_data->M_arra.size());
-                ImPlot::EndPlot();
-            }
-        }
-        ImGui::End();
-
         if (ImGui::Begin("Magnitude"))
         {
-            if (ImPlot::BeginPlot("Signal Magnitude"))
+            if (ImPlot::BeginPlot("Signal Magnitude", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
                 ImPlot::EndPlot();
@@ -444,7 +457,7 @@ void run_gui(sharedData *sh_data)
 
         if (ImGui::Begin("Argument"))
         {
-            if (ImPlot::BeginPlot("Signal Argument"))
+            if (ImPlot::BeginPlot("Signal Argument", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotLine("Argument", sh_data->frequency_axis.data(), sh_data->argument.data(), sh_data->argument.size());
                 ImPlot::EndPlot();
@@ -454,16 +467,37 @@ void run_gui(sharedData *sh_data)
 
         if (sh_data->debug)
         {
-            if (ImGui::Begin("Debug"))
+            if (ImGui::Begin("Latency"))
             {
-                if (ImPlot::BeginPlot("Latency"))
+                if (ImPlot::BeginPlot("Latency", ImVec2(ImGui::GetContentRegionAvail())))
                 {
                     ImPlot::PlotLine("Latency", sh_data->milisecs.data(), sh_data->milisecs.size());
                     ImPlot::EndPlot();
                 }
             }
             ImGui::End();
+
+            if (ImGui::Begin("Zadoff-Chu"))
+            {
+                if (ImPlot::BeginPlot("Zadoff-Chu Correlation Array", ImVec2(ImGui::GetContentRegionAvail())))
+                {
+                    ImPlot::PlotLine("Zadoff-Chu", sh_data->zadoff_corr_arr.data(), sh_data->zadoff_corr_arr.size());
+                    ImPlot::EndPlot();
+                }
+            }
+            ImGui::End();
+
+            if (ImGui::Begin("CFO"))
+            {
+                if (ImPlot::BeginPlot("CFO Correction Array", ImVec2(ImGui::GetContentRegionAvail())))
+                {
+                    ImPlot::PlotLine("CFO", sh_data->cfo_offset.data(), sh_data->cfo_offset.size());
+                    ImPlot::EndPlot();
+                }
+            }
+            ImGui::End();
         }
+        ImPlot::PopColormap();
 
         if (ImGui::BeginMainMenuBar())
         {
@@ -476,6 +510,9 @@ void run_gui(sharedData *sh_data)
                 const char *pss_mode = sh_data->changed_pss_symbols ? "PSS Symbol [ON]" : "PSS Symbol [OFF]";
                 const char *zadoff_chu = sh_data->get_zadoff_pos ? "Direct Mode [ON]" : "Direct Mode [OFF]";
                 const char *debug_mode = sh_data->debug ? "Debug Mode [ON]" : "Debug Mode [OFF]";
+                const char *cfo_correct = sh_data->cfo_cor ? "CFO Correction [ON]" : "CFO Correction [OFF]";
+                const char *equal_mode = sh_data->equal ? "Equalization [ON]" : "Equalization [OFF]";
+                const char *modulation_type = nullptr;
 
                 if (ImGui::Button(label_time, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->changed_cont_time = !sh_data->changed_cont_time;
@@ -499,9 +536,14 @@ void run_gui(sharedData *sh_data)
                 ImGui::SameLine();
                 ImGui::Text("| ZadOff-Chu Sync Pos");
 
-                ImGui::SeparatorText("Pre Modulation");
-                const char *modulation_type = nullptr;
+                ImGui::SeparatorText("DSP Module");
+                if (ImGui::Button(cfo_correct, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
+                    sh_data->cfo_cor = !sh_data->cfo_cor;
 
+                if (ImGui::Button(equal_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
+                    sh_data->equal = !sh_data->equal;
+
+                ImGui::SeparatorText("Pre Modulation");
                 switch (sh_data->modul_type_TX)
                 {
                 case ModulationType::BPSK:

@@ -268,6 +268,34 @@ void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcar
         out_signal.push_back(in_signal[i]);
 }
 
+void cfo_correction(std::vector<std::complex<double>> &in_signal, int subcarrar, int cp, std::vector<double> &cfo_offset)
+{
+    cfo_offset.clear();
+    int ofdm_symbol = subcarrar + cp;
+    double current_phase = 0.0;
+    
+    for (size_t i = 0; i < in_signal.size() / ofdm_symbol; ++i)
+    {
+        std::complex<double> r = {0.0, 0.0};
+        double phi = 0;
+        int offset = i * ofdm_symbol;
+        for (int j = 0; j < cp; ++j)
+            r += in_signal[j + offset] * conj(in_signal[j + offset + subcarrar]);
+
+        phi = std::atan2(r.imag(), r.real());
+        double epsilon = -phi / (2.0 * M_PI);
+        double delta_phi = -2.0 * M_PI * epsilon / subcarrar;
+
+        for (int k = 0; k < ofdm_symbol; ++k)
+        {
+            std::complex<double> correction(std::cos(current_phase), std::sin(current_phase));
+            in_signal[k + offset] *= correction;
+            current_phase += delta_phi;
+        }
+        cfo_offset.push_back(epsilon);
+    }
+}
+
 void remove_cp(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, std::vector<std::complex<double>> &out_signal)
 {
     out_signal.clear();

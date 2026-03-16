@@ -48,6 +48,8 @@ zadoff_chu_state zadoff_sync(std::vector<std::complex<double>> &signal, std::vec
 
 void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<double>> &out_signal);
 
+void cfo_correction(std::vector<std::complex<double>> &in_signal, int subcarrar, int cp, std::vector<double> &cfo_offset);
+
 void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar, std::vector<std::complex<double>> &signal_fft);
 
 void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::vector<std::complex<double>> &out_signal);
