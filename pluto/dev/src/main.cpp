@@ -62,6 +62,7 @@ struct sharedData
     bool changed_cont_time = true;
     bool get_zadoff_pos_loopback = false;
     bool get_zadoff_pos = false;
+    bool rm_pilots = false;
     bool debug = false;
     bool cfo_cor = false;
     bool equal = false;
@@ -208,9 +209,7 @@ void run_dsp(sharedData *sh_data)
     fftw_complex *out_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
 
     for (int i = 0; i < sh_data->mtu; ++i)
-    {
         sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
-    }
 
     int ofdm_symbol = sh_data->subcarrier + sh_data->cyclic_prefex;
     std::deque<int> bit_fifo;
@@ -244,7 +243,7 @@ void run_dsp(sharedData *sh_data)
                 }
                 append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, 0);
 
-                for (int start = 2 * (ofdm_symbol); start < (sh_data->buffer - ofdm_symbol); start += 2 * (ofdm_symbol))
+                for (int start = 2 * (ofdm_symbol); start < (sh_data->buffer); start += 2 * (ofdm_symbol))
                 {
                     build_ofdm_symbol(bit_fifo, in_build_ofdm, out_build_ofdm, sh_data->modul_type_TX, sh_data->subcarrier);
                     append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, start);
@@ -295,6 +294,9 @@ void run_dsp(sharedData *sh_data)
             if (sh_data->equal)
                 equalization(rx_complex_fft, sh_data->subcarrier);
 
+            if (sh_data->rm_pilots)
+                remove_pilots(rx_complex_fft, sh_data->subcarrier);
+
             spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument);
 
             auto end = std::chrono::steady_clock::now();
@@ -336,7 +338,6 @@ void run_gui(sharedData *sh_data)
     ImPlot::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     ImGuiStyle &style = ImGui::GetStyle();
-    ImPlotStyle &plt_style = ImPlot::GetStyle();
     int wind_pad_x = 2;
     int wind_pad_y = 2;
     int frame_pad_x = 5;
@@ -362,8 +363,8 @@ void run_gui(sharedData *sh_data)
     style.ItemInnerSpacing = ImVec2(item_space_x_inn, item_space_y_inn);
 
     static const ImVec4 plot_colors[2] = {
-        ImVec4(0.26f, 0.59f, 0.98f, 0.80f),
-        ImVec4(0.98f, 0.56f, 0.59f, 0.80f)};
+        ImVec4(0.26f, 0.59f, 0.98f, 1.f),
+        ImVec4(1.f, 0.5f, 0.2f, 1.f)};
 
     ImPlot::AddColormap("PlotPalete", plot_colors, 2);
 
@@ -445,21 +446,21 @@ void run_gui(sharedData *sh_data)
         }
         ImGui::End();
 
-        if (ImGui::Begin("Magnitude"))
-        {
-            if (ImPlot::BeginPlot("Signal Magnitude", ImVec2(ImGui::GetContentRegionAvail())))
-            {
-                ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
-                ImPlot::EndPlot();
-            }
-        }
-        ImGui::End();
-
         if (ImGui::Begin("Argument"))
         {
             if (ImPlot::BeginPlot("Signal Argument", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotLine("Argument", sh_data->frequency_axis.data(), sh_data->argument.data(), sh_data->argument.size());
+                ImPlot::EndPlot();
+            }
+        }
+        ImGui::End();
+
+        if (ImGui::Begin("Magnitude"))
+        {
+            if (ImPlot::BeginPlot("Signal Magnitude", ImVec2(ImGui::GetContentRegionAvail())))
+            {
+                ImPlot::PlotLine("Magnitude", sh_data->frequency_axis.data(), sh_data->shifted_magnitude.data(), sh_data->shifted_magnitude.size());
                 ImPlot::EndPlot();
             }
         }
@@ -512,6 +513,7 @@ void run_gui(sharedData *sh_data)
                 const char *debug_mode = sh_data->debug ? "Debug Mode [ON]" : "Debug Mode [OFF]";
                 const char *cfo_correct = sh_data->cfo_cor ? "CFO Correction [ON]" : "CFO Correction [OFF]";
                 const char *equal_mode = sh_data->equal ? "Equalization [ON]" : "Equalization [OFF]";
+                const char *rm_pilot = sh_data->rm_pilots ? "Pilots Removing [ON]" : "Pilots Removing [OFF]";
                 const char *modulation_type = nullptr;
 
                 if (ImGui::Button(label_time, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
@@ -532,9 +534,8 @@ void run_gui(sharedData *sh_data)
                     sh_data->get_zadoff_pos_loopback = !sh_data->get_zadoff_pos_loopback;
                 if (ImGui::Button(zadoff_chu, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->get_zadoff_pos = !sh_data->get_zadoff_pos;
-                ImGui::InputInt("##Sync Pos", &sh_data->sync_pos, 1, 1e1);
-                ImGui::SameLine();
-                ImGui::Text("| ZadOff-Chu Sync Pos");
+                ImGui::InputInt("Sync Pos", &sh_data->sync_pos, 1, 1e1);
+                ImGui::InputInt("U Value ", &sh_data->zadoff_chu_u, 1, 10);
 
                 ImGui::SeparatorText("DSP Module");
                 if (ImGui::Button(cfo_correct, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
@@ -542,6 +543,9 @@ void run_gui(sharedData *sh_data)
 
                 if (ImGui::Button(equal_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->equal = !sh_data->equal;
+
+                if (ImGui::Button(rm_pilot, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
+                    sh_data->rm_pilots = !sh_data->rm_pilots;
 
                 ImGui::SeparatorText("Pre Modulation");
                 switch (sh_data->modul_type_TX)

@@ -23,7 +23,7 @@ std::complex<double> map_symbol(std::deque<int> &fifo, ModulationType mod)
         int b = fifo.front();
         fifo.pop_front();
         double v = (1.0 - 2.0 * b);
-        return {v, 0.0};
+        return std::complex<double>(v, 0.0);
     }
 
     case ModulationType::QPSK:
@@ -136,8 +136,7 @@ void build_ofdm_symbol(std::deque<int> &bit_fifo, fftw_complex *in, fftw_complex
         }
         else if (k == 5 || k == 15 || k == 25 || k == 35 || k == 92 || k == 102 || k == 112 || k == 122)
         {
-            // auto s = map_symbol(pilots, ModulationType::BPSK);
-            in[k][0] = 1.0;
+            in[k][0] = 2.0;
             in[k][1] = 0.0;
         }
         else if (k == 0)
@@ -271,28 +270,23 @@ void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcar
 void cfo_correction(std::vector<std::complex<double>> &in_signal, int subcarrar, int cp, std::vector<double> &cfo_offset)
 {
     cfo_offset.clear();
+    std::complex<double> corr = 0.0;
     int ofdm_symbol = subcarrar + cp;
-    double current_phase = 0.0;
-    
-    for (size_t i = 0; i < in_signal.size() / ofdm_symbol; ++i)
+    int cnt_ofdm_symbols = in_signal.size() / ofdm_symbol;
+
+    for (size_t n = 0; n < in_signal.size(); n += ofdm_symbol)
     {
-        std::complex<double> r = {0.0, 0.0};
-        double phi = 0;
-        int offset = i * ofdm_symbol;
-        for (int j = 0; j < cp; ++j)
-            r += in_signal[j + offset] * conj(in_signal[j + offset + subcarrar]);
+        for (size_t i = n; i < n + cp; ++i)
+            corr += in_signal[i] * conj(in_signal[i + subcarrar]);
 
-        phi = std::atan2(r.imag(), r.real());
-        double epsilon = -phi / (2.0 * M_PI);
-        double delta_phi = -2.0 * M_PI * epsilon / subcarrar;
+        double eps = arg(corr) / (2 * M_PI);
+        double mean_eps = eps / cnt_ofdm_symbols;
 
-        for (int k = 0; k < ofdm_symbol; ++k)
+        for (size_t i = n; i < n + ofdm_symbol; ++i)
         {
-            std::complex<double> correction(std::cos(current_phase), std::sin(current_phase));
-            in_signal[k + offset] *= correction;
-            current_phase += delta_phi;
+            in_signal[i] *= std::complex<double>(std::cos(mean_eps), std::sin(mean_eps));
+            cfo_offset.push_back(mean_eps);
         }
-        cfo_offset.push_back(epsilon);
     }
 }
 
@@ -341,11 +335,10 @@ void equalization(std::vector<std::complex<double>> &in_signal, int subcarrar)
 {
     int num_symbols = in_signal.size() / subcarrar;
     std::vector<std::complex<double>> pilot_vals;
-    std::deque<int> pilots = {1, -1, 1, 1, -1, 1, -1, -1};
     std::vector<int> pilot_idxs = {5, 15, 25, 35, 92, 102, 112, 122};
 
-    for (size_t i = 0; i < pilots.size(); ++i)
-        pilot_vals.push_back({1.0, 0.0});
+    for (size_t i = 0; i < pilot_idxs.size(); ++i)
+        pilot_vals.push_back(std::complex<double>(2.0, 0.0));
 
     for (int i = 0; i < num_symbols; ++i)
     {
@@ -363,4 +356,14 @@ void equalization(std::vector<std::complex<double>> &in_signal, int subcarrar)
         for (int k = 0; k < subcarrar; ++k)
             in_signal[offset + k] *= std::polar(1.0, -avg_phase);
     }
+}
+
+void remove_pilots(std::vector<std::complex<double>> &in_signal, int subcarar)
+{
+    std::vector<int> pilot_idxs = {5, 15, 25, 35, 92, 102, 112, 122};
+    for (size_t i = 0; i < in_signal.size() / subcarar; ++i)
+        for (size_t j = 0; j < subcarar; ++j)
+            for (size_t k = 0; k < pilot_idxs.size(); ++k)
+                if ((j + i * subcarar) == (pilot_idxs[k] + i * subcarar))
+                    in_signal[j + i * subcarar] = {0.0, 0.0};
 }

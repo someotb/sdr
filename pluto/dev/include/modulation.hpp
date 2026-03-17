@@ -55,3 +55,5 @@ void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar,
 void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::vector<std::complex<double>> &out_signal);
 
 void equalization(std::vector<std::complex<double>> &in_signal, int subcarrar);
+
+void remove_pilots(std::vector<std::complex<double>> &in_signal, int subcarar);
