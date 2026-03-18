@@ -205,7 +205,7 @@ void run_dsp(sharedData *sh_data)
 {
     FFT_Context context(sh_data->subcarrier);
     FFT_Context context_spectre(sh_data->mtu);
-    zadoff_chu_state zadoff_state;
+    FFT_Context zad_off_chu_context(sh_data->subcarrier);
 
     for (int i = 0; i < sh_data->mtu; ++i)
         sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
@@ -217,7 +217,16 @@ void run_dsp(sharedData *sh_data)
     std::vector<std::complex<float>> rx_complex_remove_cp;
     std::vector<std::complex<float>> rx_complex_fft;
 
-    bool zad_off_generate = true;
+    std::vector<float> signal_re(sh_data->mtu, 0);
+    std::vector<float> signal_im(sh_data->mtu, 0);
+
+    std::vector<float> zc_re(sh_data->subcarrier + sh_data->cyclic_prefex, 0);
+    std::vector<float> zc_im(sh_data->subcarrier + sh_data->cyclic_prefex, 0);
+    int zad_of_idx = 0;
+
+    build_pss_zadoff_chu(zad_off_chu_context, sh_data->zadoff_chu_u);
+    append_symbol(zad_off_chu_context, zadoff_chu_seq, sh_data->cyclic_prefex, 0);
+    split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
 
     while (bit_fifo.size() < 1)
         bit_fifo.push_back(rand() & 1);
@@ -231,17 +240,10 @@ void run_dsp(sharedData *sh_data)
         }
 
         if (sh_data->form)
-        {
+        {   
             if (sh_data->changed_pss_symbols)
             {
-                build_pss_zadoff_chu(context, sh_data->zadoff_chu_u);
-                if (zad_off_generate)
-                {
-                    append_symbol(context, zadoff_chu_seq, sh_data->cyclic_prefex, 0);
-                    zad_off_generate = false;
-                }
-                append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, 0);
-
+                append_symbol(zad_off_chu_context, sh_data->tx_buffer, sh_data->cyclic_prefex, 0);
                 for (int start = 2 * (ofdm_symbol); start < (sh_data->buffer); start += 2 * (ofdm_symbol))
                 {
                     build_ofdm_symbol(bit_fifo, context, sh_data->modul_type_TX);
@@ -268,17 +270,17 @@ void run_dsp(sharedData *sh_data)
             auto start = std::chrono::steady_clock::now();
             if (sh_data->get_zadoff_pos_loopback)
             {
-                zadoff_state = zadoff_sync(sh_data->rx_complex, zadoff_chu_seq);
-                sh_data->sync_pos = zadoff_state.index;
-                sh_data->zadoff_corr_arr = zadoff_state.index_arr;
+                split_to_float(sh_data->rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
+                zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(), sh_data->zadoff_corr_arr.data());
+                sh_data->sync_pos = zad_of_idx;
                 sh_data->get_zadoff_pos_loopback = false;
             }
 
             if (sh_data->get_zadoff_pos)
             {
-                zadoff_state = zadoff_sync(sh_data->rx_complex, zadoff_chu_seq);
-                sh_data->sync_pos = zadoff_state.index;
-                sh_data->zadoff_corr_arr = zadoff_state.index_arr;
+                split_to_float(sh_data->rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
+                zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(), sh_data->zadoff_corr_arr.data());
+                sh_data->sync_pos = zad_of_idx;
             }
 
             // DSP Module

@@ -14,12 +14,6 @@ enum class ModulationType
     QAM16
 };
 
-struct zadoff_chu_state
-{
-    int index = 0;
-    std::vector<float> index_arr;
-};
-
 struct FFT_Context
 {
     int N;
@@ -58,8 +52,6 @@ std::complex<float> map_symbol(std::deque<int> &fifo, ModulationType mod);
 
 int bits_per_symbol(ModulationType type);
 
-void fill_fftw_in(FFT_Context &context, const float *sdr_re, const float *sdr_im, int offset);
-
 void fft(FFT_Context &context);
 
 void ifft(FFT_Context &context);
@@ -72,7 +64,7 @@ void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_pr
 
 void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &shifted_magnitude, std::vector<float> &argument, FFT_Context &context);
 
-zadoff_chu_state zadoff_sync(std::vector<std::complex<float>> &signal, std::vector<int16_t> &zadoff_chu_seq);
+int zadoff_sync(const float *__restrict signal_re, const float *__restrict signal_im, size_t signal_len, const float *__restrict zc_re, const float *__restrict zc_im, size_t zc_len, float* __restrict out_corr);
 
 void remove_pss(std::vector<std::complex<float>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<float>> &out_signal);
 
@@ -85,3 +77,7 @@ void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::comple
 void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar);
 
 void remove_pilots(std::vector<std::complex<float>> &in_signal, int subcarar);
+
+void split_to_float(const std::complex<float>* __restrict src, float* __restrict dst_re, float* __restrict dst_im, size_t n);
+
+void split_int16_t_to_float(const int16_t* __restrict src, float* __restrict dst_re, float* __restrict dst_im, size_t n);

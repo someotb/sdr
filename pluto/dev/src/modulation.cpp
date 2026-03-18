@@ -99,7 +99,7 @@ void build_pss_zadoff_chu(FFT_Context &context, int u)
     const int N = context.N;
     const int N_zc = N / 2;
     const float inv_Nzc = 1.0f / N_zc;
-    const float pi_u = M_PIf32 * u;
+    const float pi_u = M_PIf32 * (float)u;
 
     #pragma omp simd
     for (int i = 0; i < N; ++i)
@@ -113,7 +113,7 @@ void build_pss_zadoff_chu(FFT_Context &context, int u)
     {
         float phase = -pi_u * n * (n + 1) * inv_Nzc;
         float s, c;
-        sincosf(phase, &s, &c); 
+        sincosf(phase, &s, &c);
         context.in[2 * n + 1][0] = c;
         context.in[2 * n + 1][1] = s;
     }
@@ -158,31 +158,23 @@ void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, Modulati
 
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start)
 {
-    std::vector<int16_t> tmp((context.N + cyclic_prefex) * 2, 0);
-    float SCALE = 16000;
-    // cylic prefex
-    int i = context.N - cyclic_prefex;
+    float SCALE = 16000.f;
+    int N = context.N;
+
+    #pragma omp simd
     for (int j = 0; j < cyclic_prefex; ++j)
     {
-        if (i < context.N)
-        {
-            tmp[2 * j] = context.out[i][0] * SCALE;
-            tmp[2 * j + 1] = context.out[i][1] * SCALE;
-            ++i;
-        }
+        int src_idx = N - cyclic_prefex + j;
+        tx[start + 2 * j] = static_cast<int16_t>(context.out[src_idx][0] * SCALE);
+        tx[start + 2 * j + 1] = static_cast<int16_t>(context.out[src_idx][1] * SCALE);
     }
 
-    // symbol
-    for (int k = cyclic_prefex; k < (context.N + cyclic_prefex); ++k)
+    int symbol_offset = start + 2 * cyclic_prefex;
+    #pragma omp simd
+    for (int k = 0; k < N; ++k)
     {
-        tmp[2 * k] = context.out[k - cyclic_prefex][0] * SCALE;
-        tmp[2 * k + 1] = context.out[k - cyclic_prefex][1] * SCALE;
-    }
-
-    for (int l = 0; l < context.N + cyclic_prefex; ++l)
-    {
-        tx[start + (2 * l)] = tmp[2 * l];
-        tx[start + (2 * l + 1)] = tmp[2 * l + 1];
+        tx[symbol_offset + 2 * k] = static_cast<int16_t>(context.out[k][0] * SCALE); 
+        tx[symbol_offset + 2 * k + 1] = static_cast<int16_t>(context.out[k][1] * SCALE); 
     }
 }
 
@@ -213,38 +205,35 @@ void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &s
     }
 }
 
-zadoff_chu_state zadoff_sync(std::vector<std::complex<float>> &signal, std::vector<int16_t> &zadoff_chu_seq)
+int zadoff_sync(const float *__restrict signal_re, const float *__restrict signal_im, size_t signal_len, const float *__restrict zc_re, const float *__restrict zc_im, size_t zc_len, float* __restrict out_corr)
 {
-    if (signal.size() == 0)
-        return zadoff_chu_state{};
-
-    std::vector<std::complex<float>> zadoff_chu_compl;
-    for (size_t i = 0; i < zadoff_chu_seq.size() / 2; ++i)
-        zadoff_chu_compl.push_back(std::complex<float>(static_cast<float>(zadoff_chu_seq[2 * i]), static_cast<float>(zadoff_chu_seq[2 * i + 1])));
-
-    zadoff_chu_state zadoff_c;
-    float max_norm = 0.0;
+    float max_norm = -1.f;
     int best_idx = 0;
-
-    for (size_t n = 0; n < signal.size() - zadoff_chu_compl.size(); ++n)
+    
+    for (size_t n = 0; n < signal_len - zc_len; ++n)
     {
-        std::complex<float> sum = {0.0, 0.0};
-        for (size_t k = 0; k < zadoff_chu_compl.size(); ++k)
-            sum += signal[n + k] * std::conj(zadoff_chu_compl[k]);
+        float sum_re = 0.0f;
+        float sum_im = 0.0f;
 
-        float cur_norm = std::norm(sum);
-        zadoff_c.index_arr.push_back(cur_norm);
+        #pragma omp simd reduction(+ : sum_re, sum_im)
+        for (size_t k = 0; k < zc_len; ++k)
+        {
+            sum_re += signal_re[n + k] * zc_re[k] + signal_im[n + k] * zc_im[k];
+            sum_im += signal_im[n + k] * zc_re[k] - signal_re[n + k] * zc_im[k];
+        }
+
+        float cur_norm = sum_re * sum_re + sum_im * sum_im;
+
+        if (out_corr)
+            out_corr[n] = cur_norm;
+
         if (cur_norm > max_norm)
         {
             max_norm = cur_norm;
-            best_idx = n;
+            best_idx = (int)n;
         }
-        if (zadoff_c.index_arr.size() >= 1920)
-            zadoff_c.index_arr.clear();
     }
-
-    zadoff_c.index = best_idx;
-    return zadoff_c;
+    return best_idx;
 }
 
 void remove_pss(std::vector<std::complex<float>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<float>> &out_signal)
@@ -357,3 +346,25 @@ void remove_pilots(std::vector<std::complex<float>> &in_signal, int subcarar)
                 if ((j + i * subcarar) == (pilot_idxs[k] + i * subcarar))
                     in_signal[j + i * subcarar] = {0.0, 0.0};
 }
+
+void split_to_float(const std::complex<float>* __restrict src, float* __restrict dst_re, float* __restrict dst_im, size_t n)
+{
+    const float* raw_src = reinterpret_cast<const float*>(src);
+
+    #pragma omp simd
+    for (size_t i = 0; i < n; ++i)
+    {
+        dst_re[i] = raw_src[2 * i];
+        dst_im[i] = raw_src[2 * i + 1];
+    }
+}
+
+void split_int16_t_to_float(const int16_t* src, float* dst_re, float* dst_im, size_t num_samples) {
+    #pragma omp simd
+    for (size_t i = 0; i < num_samples; ++i)
+    {
+        dst_re[i] = static_cast<float>(src[2 * i]) / 32768.0f;
+        dst_im[i] = static_cast<float>(src[2 * i + 1]) / 32768.0f;
+    }
+}
+
