@@ -14,7 +14,7 @@
 #include <iostream>
 
 // According to 3GPP TS 38.211 section 5.1.3:
-std::complex<double> map_symbol(std::deque<int> &fifo, ModulationType mod)
+std::complex<float> map_symbol(std::deque<int> &fifo, ModulationType mod)
 {
     switch (mod)
     {
@@ -22,8 +22,8 @@ std::complex<double> map_symbol(std::deque<int> &fifo, ModulationType mod)
     {
         int b = fifo.front();
         fifo.pop_front();
-        double v = (1.0 - 2.0 * b);
-        return std::complex<double>(v, 0.0);
+        float v = (1.0 - 2.0 * b);
+        return std::complex<float>(v, 0.0);
     }
 
     case ModulationType::QPSK:
@@ -33,10 +33,10 @@ std::complex<double> map_symbol(std::deque<int> &fifo, ModulationType mod)
         int b1 = fifo.front();
         fifo.pop_front();
 
-        double real = (1.0 - 2.0 * b0);
-        double imag = (1.0 - 2.0 * b1);
+        float real = (1.0 - 2.0 * b0);
+        float imag = (1.0 - 2.0 * b1);
 
-        return std::complex<double>(real, imag) / std::sqrt(2.0);
+        return std::complex<float>(real, imag) / std::sqrt(2.f);
     }
 
     case ModulationType::QAM16:
@@ -50,10 +50,10 @@ std::complex<double> map_symbol(std::deque<int> &fifo, ModulationType mod)
         int b3 = fifo.front();
         fifo.pop_front();
 
-        double real = (1 - 2 * b0) * (2 - (1 - 2 * b2));
-        double imag = (1 - 2 * b1) * (2 - (1 - 2 * b3));
+        float real = (1 - 2 * b0) * (2 - (1 - 2 * b2));
+        float imag = (1 - 2 * b1) * (2 - (1 - 2 * b3));
 
-        return std::complex<double>(real, imag) / std::sqrt(10.0);
+        return std::complex<float>(real, imag) / std::sqrt(10.f);
     }
 
     default:
@@ -76,133 +76,132 @@ int bits_per_symbol(ModulationType type)
     }
 }
 
-void fft(fftw_complex *in, fftw_complex *out, int N)
+void fft(FFT_Context &context)
 {
-    fftw_plan plan = fftw_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-    fftw_execute(plan);
-    fftw_destroy_plan(plan);
+    fftwf_execute(context.plan_forward);
 }
 
-void ifft(fftw_complex *in, fftw_complex *out, int N)
+void ifft(FFT_Context &context)
 {
-    fftw_plan plan = fftw_plan_dft_1d(N, in, out, FFTW_BACKWARD, FFTW_ESTIMATE);
-    fftw_execute(plan);
+    fftwf_execute(context.plan_backward);
+
+    float scale = 1.0f / context.N;
+    #pragma omp simd
+    for (int i = 0; i < context.N; ++i)
+    {
+        context.out[i][0] *= scale;
+        context.out[i][1] *= scale;
+    }
+}
+
+void build_pss_zadoff_chu(FFT_Context &context, int u)
+{
+    const int N = context.N;
+    const int N_zc = N / 2;
+    const float inv_Nzc = 1.0f / N_zc;
+    const float pi_u = M_PIf32 * u;
+
+    #pragma omp simd
     for (int i = 0; i < N; ++i)
     {
-        out[i][0] /= N;
-        out[i][1] /= N;
-    }
-    fftw_destroy_plan(plan);
-}
-
-void build_pss_zadoff_chu(fftw_complex *in, fftw_complex *out, int subcarrier, int u)
-{
-    if (subcarrier <= 0)
-        throw std::invalid_argument("subcarrier must be positive");
-
-    for (int i = 0; i < subcarrier; ++i)
-    {
-        in[i][0] = 0.0;
-        in[i][1] = 0.0;
+        context.in[i][0] = 0.0f;
+        context.in[i][1] = 0.0f;
     }
 
-    int N_zc = subcarrier / 2;
-
+    #pragma omp simd
     for (int n = 0; n < N_zc; ++n)
     {
-        double phase = -M_PI * u * n * (n + 1) / N_zc;
-        int freq_idx = 2 * n + 1;
-        in[freq_idx][0] = cos(phase);
-        in[freq_idx][1] = sin(phase);
+        float phase = -pi_u * n * (n + 1) * inv_Nzc;
+        float s, c;
+        sincosf(phase, &s, &c); 
+        context.in[2 * n + 1][0] = c;
+        context.in[2 * n + 1][1] = s;
     }
-
-    ifft(in, out, subcarrier);
+    ifft(context);
 }
 
-void build_ofdm_symbol(std::deque<int> &bit_fifo, fftw_complex *in, fftw_complex *out, ModulationType mod, int subcarrier)
+void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, ModulationType mod)
 {
-    size_t needed = subcarrier * bits_per_symbol(mod);
+    size_t needed = context.N * bits_per_symbol(mod);
     std::deque<int> pilots = {1, -1, 1, 1, -1, 1, -1, -1};
 
     while (bit_fifo.size() < needed)
         bit_fifo.push_back(rand() & 1);
 
-    for (int k = 0; k < subcarrier; ++k)
+    for (int k = 0; k < context.N; ++k)
     {
-        if (k > subcarrier / 2 - 28 && k < subcarrier / 2 + 27)
+        if (k > context.N / 2 - 28 && k < context.N / 2 + 27)
         {
-            in[k][0] = 0;
-            in[k][1] = 0;
+            context.in[k][0] = 0;
+            context.in[k][1] = 0;
         }
         else if (k == 5 || k == 15 || k == 25 || k == 35 || k == 92 || k == 102 || k == 112 || k == 122)
         {
-            in[k][0] = 2.0;
-            in[k][1] = 0.0;
+            context.in[k][0] = 2.0;
+            context.in[k][1] = 0.0;
         }
         else if (k == 0)
         {
-            in[k][0] = 0;
-            in[k][1] = 0;
+            context.in[k][0] = 0;
+            context.in[k][1] = 0;
         }
         else
         {
             auto s = map_symbol(bit_fifo, mod);
-            in[k][0] = s.real();
-            in[k][1] = s.imag();
+            context.in[k][0] = s.real();
+            context.in[k][1] = s.imag();
         }
     }
 
-    ifft(in, out, subcarrier);
+    ifft(context);
 }
 
-void append_symbol(fftw_complex *out, std::vector<int16_t> &tx, int subcarrier, int cyclic_prefex, int start)
+void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start)
 {
-    std::vector<int16_t> tmp((subcarrier + cyclic_prefex) * 2, 0);
-    double SCALE = 16000;
+    std::vector<int16_t> tmp((context.N + cyclic_prefex) * 2, 0);
+    float SCALE = 16000;
     // cylic prefex
-    int i = subcarrier - cyclic_prefex;
+    int i = context.N - cyclic_prefex;
     for (int j = 0; j < cyclic_prefex; ++j)
     {
-        if (i < subcarrier)
+        if (i < context.N)
         {
-            tmp[2 * j] = out[i][0] * SCALE;
-            tmp[2 * j + 1] = out[i][1] * SCALE;
+            tmp[2 * j] = context.out[i][0] * SCALE;
+            tmp[2 * j + 1] = context.out[i][1] * SCALE;
             ++i;
         }
     }
 
     // symbol
-    for (int k = cyclic_prefex; k < (subcarrier + cyclic_prefex); ++k)
+    for (int k = cyclic_prefex; k < (context.N + cyclic_prefex); ++k)
     {
-        tmp[2 * k] = out[k - cyclic_prefex][0] * SCALE;
-        tmp[2 * k + 1] = out[k - cyclic_prefex][1] * SCALE;
+        tmp[2 * k] = context.out[k - cyclic_prefex][0] * SCALE;
+        tmp[2 * k + 1] = context.out[k - cyclic_prefex][1] * SCALE;
     }
 
-    for (int l = 0; l < subcarrier + cyclic_prefex; ++l)
+    for (int l = 0; l < context.N + cyclic_prefex; ++l)
     {
         tx[start + (2 * l)] = tmp[2 * l];
         tx[start + (2 * l + 1)] = tmp[2 * l + 1];
     }
 }
 
-void spectrum(std::vector<std::complex<double>> &in_signal, std::vector<double> &shifted_magnitude, std::vector<double> &argument)
+void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &shifted_magnitude, std::vector<float> &argument, FFT_Context &context)
 {
-    fftw_complex *in_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * in_signal.size()));
-    fftw_complex *out_spectre = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * in_signal.size()));
-    std::vector<double> magnitude(in_signal.size(), 0);
+    std::vector<float> magnitude(in_signal.size(), 0);
 
     for (size_t i = 0; i < in_signal.size(); ++i)
     {
-        in_spectre[i][0] = std::real(in_signal[i]) / 32768.0;
-        in_spectre[i][1] = std::imag(in_signal[i]) / 32768.0;
+        context.in[i][0] = std::real(in_signal[i]) / 32768.0;
+        context.in[i][1] = std::imag(in_signal[i]) / 32768.0;
     }
 
-    fft(in_spectre, out_spectre, in_signal.size());
+    fft(context);
 
     for (size_t i = 0; i < in_signal.size(); ++i)
     {
-        double real = out_spectre[i][0];
-        double imag = out_spectre[i][1];
+        float real = context.out[i][0];
+        float imag = context.out[i][1];
         magnitude[i] = 20.0 * log10(sqrt(real * real + imag * imag) / in_signal.size());
         argument[i] = atan2(imag, real);
     }
@@ -212,31 +211,28 @@ void spectrum(std::vector<std::complex<double>> &in_signal, std::vector<double> 
         shifted_magnitude[i] = magnitude[i + in_signal.size() / 2];
         shifted_magnitude[i + in_signal.size() / 2] = magnitude[i];
     }
-
-    fftw_free(in_spectre);
-    fftw_free(out_spectre);
 }
 
-zadoff_chu_state zadoff_sync(std::vector<std::complex<double>> &signal, std::vector<int16_t> &zadoff_chu_seq)
+zadoff_chu_state zadoff_sync(std::vector<std::complex<float>> &signal, std::vector<int16_t> &zadoff_chu_seq)
 {
     if (signal.size() == 0)
         return zadoff_chu_state{};
 
-    std::vector<std::complex<double>> zadoff_chu_compl;
+    std::vector<std::complex<float>> zadoff_chu_compl;
     for (size_t i = 0; i < zadoff_chu_seq.size() / 2; ++i)
-        zadoff_chu_compl.push_back(std::complex<double>(static_cast<double>(zadoff_chu_seq[2 * i]), static_cast<double>(zadoff_chu_seq[2 * i + 1])));
+        zadoff_chu_compl.push_back(std::complex<float>(static_cast<float>(zadoff_chu_seq[2 * i]), static_cast<float>(zadoff_chu_seq[2 * i + 1])));
 
     zadoff_chu_state zadoff_c;
-    double max_norm = 0.0;
+    float max_norm = 0.0;
     int best_idx = 0;
 
     for (size_t n = 0; n < signal.size() - zadoff_chu_compl.size(); ++n)
     {
-        std::complex<double> sum = {0.0, 0.0};
+        std::complex<float> sum = {0.0, 0.0};
         for (size_t k = 0; k < zadoff_chu_compl.size(); ++k)
             sum += signal[n + k] * std::conj(zadoff_chu_compl[k]);
 
-        double cur_norm = std::norm(sum);
+        float cur_norm = std::norm(sum);
         zadoff_c.index_arr.push_back(cur_norm);
         if (cur_norm > max_norm)
         {
@@ -251,7 +247,7 @@ zadoff_chu_state zadoff_sync(std::vector<std::complex<double>> &signal, std::vec
     return zadoff_c;
 }
 
-void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<double>> &out_signal)
+void remove_pss(std::vector<std::complex<float>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<float>> &out_signal)
 {
     out_signal.clear();
     out_signal.reserve(in_signal.size() - subcarrar - cp);
@@ -267,10 +263,10 @@ void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcar
         out_signal.push_back(in_signal[i]);
 }
 
-void cfo_correction(std::vector<std::complex<double>> &in_signal, int subcarrar, int cp, std::vector<double> &cfo_offset)
+void cfo_correction(std::vector<std::complex<float>> &in_signal, int subcarrar, int cp, std::vector<float> &cfo_offset)
 {
     cfo_offset.clear();
-    std::complex<double> corr = 0.0;
+    std::complex<float> corr = 0.0;
     int ofdm_symbol = subcarrar + cp;
     int cnt_ofdm_symbols = in_signal.size() / ofdm_symbol;
 
@@ -279,18 +275,18 @@ void cfo_correction(std::vector<std::complex<double>> &in_signal, int subcarrar,
         for (size_t i = n; i < n + cp; ++i)
             corr += in_signal[i] * conj(in_signal[i + subcarrar]);
 
-        double eps = arg(corr) / (2 * M_PI);
-        double mean_eps = eps / cnt_ofdm_symbols;
+        float eps = arg(corr) / (2 * M_PI);
+        float mean_eps = eps / cnt_ofdm_symbols;
 
         for (size_t i = n; i < n + ofdm_symbol; ++i)
         {
-            in_signal[i] *= std::complex<double>(std::cos(mean_eps), std::sin(mean_eps));
+            in_signal[i] *= std::complex<float>(std::cos(mean_eps), std::sin(mean_eps));
             cfo_offset.push_back(mean_eps);
         }
     }
 }
 
-void remove_cp(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, std::vector<std::complex<double>> &out_signal)
+void remove_cp(std::vector<std::complex<float>> &in_signal, int cp, int subcarrar, std::vector<std::complex<float>> &out_signal)
 {
     out_signal.clear();
     size_t cnt_ofdm_symbols = in_signal.size() / (cp + subcarrar);
@@ -305,64 +301,58 @@ void remove_cp(std::vector<std::complex<double>> &in_signal, int cp, int subcarr
     }
 }
 
-void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::vector<std::complex<double>> &out_signal)
+void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal, FFT_Context &context)
 {
     out_signal.clear();
     out_signal.reserve(in_signal.size());
-    fftw_complex *in_fft = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * subcarrar));
-    fftw_complex *out_fft = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * subcarrar));
 
-    for (size_t i = 0; i < in_signal.size() / subcarrar; ++i)
+    for (size_t i = 0; i < in_signal.size() / context.N; ++i)
     {
-        for (int j = 0; j < subcarrar; ++j)
+        for (int j = 0; j < context.N; ++j)
         {
-            in_fft[j][0] = std::real(in_signal[j + (i * subcarrar)]);
-            in_fft[j][1] = std::imag(in_signal[j + (i * subcarrar)]);
+            context.in[j][0] = std::real(in_signal[j + (i * context.N)]);
+            context.in[j][1] = std::imag(in_signal[j + (i * context.N)]);
         }
 
-        fft(in_fft, out_fft, subcarrar);
+        fft(context);
 
-        for (int k = 0; k < subcarrar; ++k)
-        {
-            out_signal.push_back(std::complex(out_fft[k][0], out_fft[k][1]));
-        }
+        for (int k = 0; k < context.N; ++k)
+            out_signal.push_back(std::complex<float>(context.out[k][0], context.out[k][1]));
     }
-    fftw_free(in_fft);
-    fftw_free(out_fft);
 }
 
-void equalization(std::vector<std::complex<double>> &in_signal, int subcarrar)
+void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar)
 {
     int num_symbols = in_signal.size() / subcarrar;
-    std::vector<std::complex<double>> pilot_vals;
+    std::vector<std::complex<float>> pilot_vals;
     std::vector<int> pilot_idxs = {5, 15, 25, 35, 92, 102, 112, 122};
 
     for (size_t i = 0; i < pilot_idxs.size(); ++i)
-        pilot_vals.push_back(std::complex<double>(2.0, 0.0));
+        pilot_vals.push_back(std::complex<float>(2.0, 0.0));
 
     for (int i = 0; i < num_symbols; ++i)
     {
-        double symbols_phase = 0;
+        float symbols_phase = 0;
         int offset = i * subcarrar;
         for (size_t j = 0; j < pilot_idxs.size(); ++j)
         {
             int pilot_idx = pilot_idxs[j];
-            std::complex<double> rx_pilot = in_signal[offset + pilot_idx];
+            std::complex<float> rx_pilot = in_signal[offset + pilot_idx];
             symbols_phase += std::arg(rx_pilot * std::conj(pilot_vals[j]));
         }
 
-        double avg_phase = symbols_phase / pilot_idxs.size();
+        float avg_phase = symbols_phase / pilot_idxs.size();
 
         for (int k = 0; k < subcarrar; ++k)
-            in_signal[offset + k] *= std::polar(1.0, -avg_phase);
+            in_signal[offset + k] *= std::polar(1.f, -avg_phase);
     }
 }
 
-void remove_pilots(std::vector<std::complex<double>> &in_signal, int subcarar)
+void remove_pilots(std::vector<std::complex<float>> &in_signal, int subcarar)
 {
     std::vector<int> pilot_idxs = {5, 15, 25, 35, 92, 102, 112, 122};
     for (size_t i = 0; i < in_signal.size() / subcarar; ++i)
-        for (size_t j = 0; j < subcarar; ++j)
+        for (int j = 0; j < subcarar; ++j)
             for (size_t k = 0; k < pilot_idxs.size(); ++k)
                 if ((j + i * subcarar) == (pilot_idxs[k] + i * subcarar))
                     in_signal[j + i * subcarar] = {0.0, 0.0};

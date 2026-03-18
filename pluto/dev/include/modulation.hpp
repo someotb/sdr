@@ -17,7 +17,33 @@ enum class ModulationType
 struct zadoff_chu_state
 {
     int index = 0;
-    std::vector<double> index_arr;
+    std::vector<float> index_arr;
+};
+
+struct FFT_Context
+{
+    int N;
+    fftwf_complex *in;
+    fftwf_complex *out;
+    fftwf_plan plan_forward;
+    fftwf_plan plan_backward;
+
+    FFT_Context(int n) : N(n)
+    {
+        in = fftwf_alloc_complex(N);
+        out = fftwf_alloc_complex(N);
+
+        plan_forward = fftwf_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_MEASURE);
+        plan_backward = fftwf_plan_dft_1d(N, in, out, FFTW_BACKWARD, FFTW_MEASURE);
+    }
+
+    ~FFT_Context()
+    {
+        fftwf_destroy_plan(plan_forward);
+        fftwf_destroy_plan(plan_backward);
+        fftwf_free(in);
+        fftwf_free(out);
+    }
 };
 
 /**
@@ -28,32 +54,34 @@ struct zadoff_chu_state
  * @param modulation_type Type of modulation to use
  */
 
-std::complex<double> map_symbol(std::deque<int> &fifo, ModulationType mod);
+std::complex<float> map_symbol(std::deque<int> &fifo, ModulationType mod);
 
 int bits_per_symbol(ModulationType type);
 
-void fft(fftw_complex *in, fftw_complex *out, int N);
+void fill_fftw_in(FFT_Context &context, const float *sdr_re, const float *sdr_im, int offset);
 
-void ifft(fftw_complex *in, fftw_complex *out, int N);
+void fft(FFT_Context &context);
 
-void build_pss_zadoff_chu(fftw_complex *in, fftw_complex *out, int subcarrier, int u);
+void ifft(FFT_Context &context);
 
-void build_ofdm_symbol(std::deque<int> &bit_fifo, fftw_complex *in, fftw_complex *out, ModulationType mod, int subcarrier);
+void build_pss_zadoff_chu(FFT_Context &context, int u);
 
-void append_symbol(fftw_complex *out, std::vector<int16_t> &tx, int subcarrier, int cyclic_prefex, int start);
+void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, ModulationType mod);
 
-void spectrum(std::vector<std::complex<double>> &in_signal, std::vector<double> &shifted_magnitude, std::vector<double> &argument);
+void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start);
 
-zadoff_chu_state zadoff_sync(std::vector<std::complex<double>> &signal, std::vector<int16_t> &zadoff_chu_seq);
+void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &shifted_magnitude, std::vector<float> &argument, FFT_Context &context);
 
-void remove_pss(std::vector<std::complex<double>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<double>> &out_signal);
+zadoff_chu_state zadoff_sync(std::vector<std::complex<float>> &signal, std::vector<int16_t> &zadoff_chu_seq);
 
-void cfo_correction(std::vector<std::complex<double>> &in_signal, int subcarrar, int cp, std::vector<double> &cfo_offset);
+void remove_pss(std::vector<std::complex<float>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<float>> &out_signal);
 
-void remove_cp(std::vector<std::complex<double>> &signal, int cp, int subcarrar, std::vector<std::complex<double>> &signal_fft);
+void cfo_correction(std::vector<std::complex<float>> &in_signal, int subcarrar, int cp, std::vector<float> &cfo_offset);
 
-void decode(std::vector<std::complex<double>> &in_signal, int subcarrar, std::vector<std::complex<double>> &out_signal);
+void remove_cp(std::vector<std::complex<float>> &signal, int cp, int subcarrar, std::vector<std::complex<float>> &signal_fft);
 
-void equalization(std::vector<std::complex<double>> &in_signal, int subcarrar);
+void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal, FFT_Context &context);
 
-void remove_pilots(std::vector<std::complex<double>> &in_signal, int subcarar);
+void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar);
+
+void remove_pilots(std::vector<std::complex<float>> &in_signal, int subcarar);

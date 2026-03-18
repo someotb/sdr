@@ -36,15 +36,15 @@ struct sharedData
     ModulationType modul_type_TX = ModulationType::QPSK;
     std::string device;
     std::vector<std::string> devices;
-    std::vector<std::complex<double>> rx_complex;
-    std::vector<std::complex<double>> rx_complex_fft_gui;
+    std::vector<std::complex<float>> rx_complex;
+    std::vector<std::complex<float>> rx_complex_fft_gui;
     std::vector<int16_t> tx_buffer;
-    std::vector<double> shifted_magnitude;
-    std::vector<double> argument;
-    std::vector<double> frequency_axis;
-    std::vector<double> zadoff_corr_arr;
-    std::vector<double> milisecs;
-    std::vector<double> cfo_offset;
+    std::vector<float> shifted_magnitude;
+    std::vector<float> argument;
+    std::vector<float> frequency_axis;
+    std::vector<float> zadoff_corr_arr;
+    std::vector<float> milisecs;
+    std::vector<float> cfo_offset;
     std::atomic<bool> form = true;
     std::atomic<bool> read = false;
     std::atomic<bool> dsp = false;
@@ -68,9 +68,9 @@ struct sharedData
     bool equal = false;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
-    double rx_frequency = 777e6;
-    double tx_frequency = 777e6;
-    double sample_rate = 1.92e6;
+    float rx_frequency = 777e6;
+    float tx_frequency = 777e6;
+    float sample_rate = 1.92e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
     int cyclic_prefex = 32;
@@ -142,7 +142,7 @@ void run_backend(sharedData *sh_data)
             }
 
             for (int i = 0; i < sh_data->mtu; ++i)
-                sh_data->rx_complex[i] = std::complex<double>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
+                sh_data->rx_complex[i] = std::complex<float>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
 
             sh_data->read = false;
             sh_data->dsp = true;
@@ -150,14 +150,14 @@ void run_backend(sharedData *sh_data)
 
         if (sh_data->changed_rx_gain)
         {
-            if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_gain))) != 0)
+            if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_RX, 0, sh_data->rx_gain)) != 0)
                 std::cout << "[ERROR] Set RX gain | Error code: " << err << "\n";
             sh_data->changed_rx_gain = false;
         }
 
         if (sh_data->changed_tx_gain)
         {
-            if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_gain))) != 0)
+            if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_TX, 0, sh_data->tx_gain)) != 0)
                 std::cout << "[ERROR] Set TX gain | Error code: " << err << "\n";
             sh_data->changed_tx_gain = false;
         }
@@ -187,14 +187,14 @@ void run_backend(sharedData *sh_data)
 
         if (sh_data->changed_rx_bandwidth)
         {
-            if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_RX, 0, static_cast<double>(sh_data->rx_bandwidth))) != 0)
+            if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_RX, 0, sh_data->rx_bandwidth)) != 0)
                 std::cout << "[ERROR] Set RX bandwidth | Error code: " << err << "\n";
             sh_data->changed_rx_bandwidth = false;
         }
 
         if (sh_data->changed_tx_bandwidth)
         {
-            if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_TX, 0, static_cast<double>(sh_data->tx_bandwidth))) != 0)
+            if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_TX, 0, sh_data->tx_bandwidth)) != 0)
                 std::cout << "[ERROR] Set TX bandwidth | Error code: " << err << "\n";
             sh_data->changed_tx_bandwidth = false;
         }
@@ -203,10 +203,9 @@ void run_backend(sharedData *sh_data)
 
 void run_dsp(sharedData *sh_data)
 {
+    FFT_Context context(sh_data->subcarrier);
+    FFT_Context context_spectre(sh_data->mtu);
     zadoff_chu_state zadoff_state;
-
-    fftw_complex *in_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
-    fftw_complex *out_build_ofdm = static_cast<fftw_complex *>(fftw_malloc(sizeof(fftw_complex) * sh_data->subcarrier));
 
     for (int i = 0; i < sh_data->mtu; ++i)
         sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
@@ -214,9 +213,9 @@ void run_dsp(sharedData *sh_data)
     int ofdm_symbol = sh_data->subcarrier + sh_data->cyclic_prefex;
     std::deque<int> bit_fifo;
     std::vector<int16_t> zadoff_chu_seq((sh_data->subcarrier + sh_data->cyclic_prefex) * 2);
-    std::vector<std::complex<double>> rx_complex_remove_pss;
-    std::vector<std::complex<double>> rx_complex_remove_cp;
-    std::vector<std::complex<double>> rx_complex_fft;
+    std::vector<std::complex<float>> rx_complex_remove_pss;
+    std::vector<std::complex<float>> rx_complex_remove_cp;
+    std::vector<std::complex<float>> rx_complex_fft;
 
     bool zad_off_generate = true;
 
@@ -235,18 +234,18 @@ void run_dsp(sharedData *sh_data)
         {
             if (sh_data->changed_pss_symbols)
             {
-                build_pss_zadoff_chu(in_build_ofdm, out_build_ofdm, sh_data->subcarrier, sh_data->zadoff_chu_u);
+                build_pss_zadoff_chu(context, sh_data->zadoff_chu_u);
                 if (zad_off_generate)
                 {
-                    append_symbol(out_build_ofdm, zadoff_chu_seq, sh_data->subcarrier, sh_data->cyclic_prefex, 0);
+                    append_symbol(context, zadoff_chu_seq, sh_data->cyclic_prefex, 0);
                     zad_off_generate = false;
                 }
-                append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, 0);
+                append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, 0);
 
                 for (int start = 2 * (ofdm_symbol); start < (sh_data->buffer); start += 2 * (ofdm_symbol))
                 {
-                    build_ofdm_symbol(bit_fifo, in_build_ofdm, out_build_ofdm, sh_data->modul_type_TX, sh_data->subcarrier);
-                    append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, start);
+                    build_ofdm_symbol(bit_fifo, context, sh_data->modul_type_TX);
+                    append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
                 }
 
                 sh_data->form = false;
@@ -256,8 +255,8 @@ void run_dsp(sharedData *sh_data)
             {
                 for (int start = 0; start < (sh_data->buffer - sh_data->subcarrier + sh_data->cyclic_prefex); start += 2 * (sh_data->subcarrier + sh_data->cyclic_prefex))
                 {
-                    build_ofdm_symbol(bit_fifo, in_build_ofdm, out_build_ofdm, sh_data->modul_type_TX, sh_data->subcarrier);
-                    append_symbol(out_build_ofdm, sh_data->tx_buffer, sh_data->subcarrier, sh_data->cyclic_prefex, start);
+                    build_ofdm_symbol(bit_fifo, context, sh_data->modul_type_TX);
+                    append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
                 }
 
                 sh_data->form = false;
@@ -282,14 +281,14 @@ void run_dsp(sharedData *sh_data)
                 sh_data->zadoff_corr_arr = zadoff_state.index_arr;
             }
 
-            // Main DSP Module
+            // DSP Module
             remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
 
             if (sh_data->cfo_cor)
                 cfo_correction(rx_complex_remove_pss, sh_data->subcarrier, sh_data->cyclic_prefex, sh_data->cfo_offset);
 
             remove_cp(rx_complex_remove_pss, sh_data->cyclic_prefex, sh_data->subcarrier, rx_complex_remove_cp);
-            decode(rx_complex_remove_cp, sh_data->subcarrier, rx_complex_fft);
+            decode(rx_complex_remove_cp, rx_complex_fft, context);
 
             if (sh_data->equal)
                 equalization(rx_complex_fft, sh_data->subcarrier);
@@ -297,7 +296,7 @@ void run_dsp(sharedData *sh_data)
             if (sh_data->rm_pilots)
                 remove_pilots(rx_complex_fft, sh_data->subcarrier);
 
-            spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument);
+            spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument, context_spectre);
 
             auto end = std::chrono::steady_clock::now();
 
@@ -316,9 +315,6 @@ void run_dsp(sharedData *sh_data)
             sh_data->form = true;
         }
     }
-
-    fftw_free(in_build_ofdm);
-    fftw_free(out_build_ofdm);
 }
 
 void run_gui(sharedData *sh_data)
@@ -397,15 +393,18 @@ void run_gui(sharedData *sh_data)
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
 
+        const float *raw_data = reinterpret_cast<const float *>(sh_data->rx_complex.data());
+        const float *dsp_data = reinterpret_cast<const float *>(sh_data->rx_complex_fft_gui.data());
+
         ImPlot::PushColormap("PlotPalete");
         if (ImGui::Begin("Scatter Raw"))
         {
             if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotScatter("I/Q",
-                                    reinterpret_cast<double *>(sh_data->rx_complex.data()),
-                                    reinterpret_cast<double *>(sh_data->rx_complex.data()) + 1,
-                                    sh_data->rx_complex.size(), 0, 0, sizeof(std::complex<double>));
+                                    raw_data,
+                                    raw_data + 1,
+                                    sh_data->rx_complex.size(), 0, 0, sizeof(std::complex<float>));
                 ImPlot::EndPlot();
             }
         }
@@ -416,9 +415,9 @@ void run_gui(sharedData *sh_data)
             if (ImPlot::BeginPlot("Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotScatter("I/Q",
-                                    reinterpret_cast<double *>(sh_data->rx_complex_fft_gui.data()),
-                                    reinterpret_cast<double *>(sh_data->rx_complex_fft_gui.data()) + 1,
-                                    sh_data->rx_complex_fft_gui.size(), 0, 0, sizeof(std::complex<double>));
+                                    dsp_data,
+                                    dsp_data + 1,
+                                    sh_data->rx_complex_fft_gui.size(), 0, 0, sizeof(std::complex<float>));
                 ImPlot::EndPlot();
             }
         }
@@ -428,8 +427,8 @@ void run_gui(sharedData *sh_data)
         {
             if (ImPlot::BeginPlot("Raw I/Q samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex.data()), sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
-                ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex.data()) + 1, sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+                ImPlot::PlotLine("I", raw_data, sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
+                ImPlot::PlotLine("Q", raw_data + 1, sh_data->rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
                 ImPlot::EndPlot();
             }
         }
@@ -439,8 +438,8 @@ void run_gui(sharedData *sh_data)
         {
             if (ImPlot::BeginPlot("I/Q Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                ImPlot::PlotLine("I", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()), sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
-                ImPlot::PlotLine("Q", reinterpret_cast<const double *>(sh_data->rx_complex_fft_gui.data()) + 1, sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<double>));
+                ImPlot::PlotLine("I", dsp_data, sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
+                ImPlot::PlotLine("Q", dsp_data + 1, sh_data->rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
                 ImPlot::EndPlot();
             }
         }
@@ -468,11 +467,15 @@ void run_gui(sharedData *sh_data)
 
         if (sh_data->debug)
         {
+            const float *debug_latency = reinterpret_cast<const float *>(sh_data->milisecs.data());
+            const float *zadoff_chu = reinterpret_cast<const float *>(sh_data->zadoff_corr_arr.data());
+            const float *cfo_cor = reinterpret_cast<const float *>(sh_data->cfo_offset.data());
+
             if (ImGui::Begin("Latency"))
             {
                 if (ImPlot::BeginPlot("Latency", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    ImPlot::PlotLine("Latency", sh_data->milisecs.data(), sh_data->milisecs.size());
+                    ImPlot::PlotLine("Latency", debug_latency, sh_data->milisecs.size());
                     ImPlot::EndPlot();
                 }
             }
@@ -482,7 +485,7 @@ void run_gui(sharedData *sh_data)
             {
                 if (ImPlot::BeginPlot("Zadoff-Chu Correlation Array", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    ImPlot::PlotLine("Zadoff-Chu", sh_data->zadoff_corr_arr.data(), sh_data->zadoff_corr_arr.size());
+                    ImPlot::PlotLine("Zadoff-Chu", zadoff_chu, sh_data->zadoff_corr_arr.size());
                     ImPlot::EndPlot();
                 }
             }
@@ -492,7 +495,7 @@ void run_gui(sharedData *sh_data)
             {
                 if (ImPlot::BeginPlot("CFO Correction Array", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    ImPlot::PlotLine("CFO", sh_data->cfo_offset.data(), sh_data->cfo_offset.size());
+                    ImPlot::PlotLine("CFO", cfo_cor, sh_data->cfo_offset.size());
                     ImPlot::EndPlot();
                 }
             }
@@ -597,10 +600,10 @@ void run_gui(sharedData *sh_data)
                 if (ImGui::DragFloat("TX Gain", &sh_data->tx_gain, 0.25f, 0.f, 89.f))
                     sh_data->changed_tx_gain = true;
 
-                if (ImGui::InputDouble("RX Frequency", &sh_data->rx_frequency, 1e2, 1e3))
+                if (ImGui::InputFloat("RX Frequency", &sh_data->rx_frequency, 1e2, 1e3))
                     sh_data->changed_rx_freq = true;
 
-                if (ImGui::InputDouble("TX Frequency", &sh_data->tx_frequency, 1e2, 1e3))
+                if (ImGui::InputFloat("TX Frequency", &sh_data->tx_frequency, 1e2, 1e3))
                     sh_data->changed_tx_freq = true;
 
                 if (ImGui::SliderInt("RX Bandwidth", &cur_rx_bandwidth, 0, bandwidths.size() - 1, std::to_string(bandwidths[cur_rx_bandwidth]).c_str()))
@@ -615,7 +618,7 @@ void run_gui(sharedData *sh_data)
                     sh_data->changed_tx_bandwidth = true;
                 }
 
-                if (ImGui::InputDouble("Sample Rate", &sh_data->sample_rate, 1e5, 1e6))
+                if (ImGui::InputFloat("Sample Rate", &sh_data->sample_rate, 1e5, 1e6))
                     sh_data->changed_sample_rate = true;
 
                 ImGui::EndMenu();
