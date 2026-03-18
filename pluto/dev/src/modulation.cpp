@@ -135,7 +135,7 @@ void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, Modulati
             context.in[k][0] = 0;
             context.in[k][1] = 0;
         }
-        else if (k == 5 || k == 15 || k == 25 || k == 35 || k == 92 || k == 102 || k == 112 || k == 122)
+        else if (k == 4 || k == 12 || k == 20 || k == 28 || k == 100 || k == 108 || k == 116 || k == 124)
         {
             context.in[k][0] = 2.0;
             context.in[k][1] = 0.0;
@@ -158,7 +158,7 @@ void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, Modulati
 
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start)
 {
-    float SCALE = 16000.f;
+    float SCALE = 32768.f;
     int N = context.N;
 
     #pragma omp simd
@@ -314,7 +314,7 @@ void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar)
 {
     int num_symbols = in_signal.size() / subcarrar;
     std::vector<std::complex<float>> pilot_vals;
-    std::vector<int> pilot_idxs = {5, 15, 25, 35, 92, 102, 112, 122};
+    std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
 
     for (size_t i = 0; i < pilot_idxs.size(); ++i)
         pilot_vals.push_back(std::complex<float>(2.0, 0.0));
@@ -339,7 +339,7 @@ void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar)
 
 void remove_pilots(std::vector<std::complex<float>> &in_signal, int subcarar)
 {
-    std::vector<int> pilot_idxs = {5, 15, 25, 35, 92, 102, 112, 122};
+    std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
     for (size_t i = 0; i < in_signal.size() / subcarar; ++i)
         for (int j = 0; j < subcarar; ++j)
             for (size_t k = 0; k < pilot_idxs.size(); ++k)
