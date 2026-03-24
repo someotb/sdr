@@ -74,7 +74,7 @@ void remove_cp(std::vector<std::complex<float>> &signal, int cp, int subcarrar, 
 
 void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal, FFT_Context &context);
 
-void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar);
+void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar, std::vector<std::complex<float>> &out_signal);
 
 void remove_pilots(std::vector<std::complex<float>> &in_signal, int subcarar);
 

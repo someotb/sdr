@@ -22,8 +22,8 @@ std::complex<float> map_symbol(std::deque<int> &fifo, ModulationType mod)
     {
         int b = fifo.front();
         fifo.pop_front();
-        float v = (1.0 - 2.0 * b);
-        return std::complex<float>(v, 0.0);
+        float v = (1.0 - 2.0 * b) ;
+        return std::complex<float>(v, v) / std::sqrt(2.f);
     }
 
     case ModulationType::QPSK:
@@ -86,7 +86,7 @@ void ifft(FFT_Context &context)
     fftwf_execute(context.plan_backward);
 
     float scale = 1.0f / context.N;
-    #pragma omp simd
+#pragma omp simd
     for (int i = 0; i < context.N; ++i)
     {
         context.out[i][0] *= scale;
@@ -137,7 +137,7 @@ void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, Modulati
         }
         else if (k == 4 || k == 12 || k == 20 || k == 28 || k == 100 || k == 108 || k == 116 || k == 124)
         {
-            context.in[k][0] = 2.0;
+            context.in[k][0] = 1.0;
             context.in[k][1] = 0.0;
         }
         else if (k == 0)
@@ -173,8 +173,8 @@ void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_pr
     #pragma omp simd
     for (int k = 0; k < N; ++k)
     {
-        tx[symbol_offset + 2 * k] = static_cast<int16_t>(context.out[k][0] * SCALE); 
-        tx[symbol_offset + 2 * k + 1] = static_cast<int16_t>(context.out[k][1] * SCALE); 
+        tx[symbol_offset + 2 * k] = static_cast<int16_t>(context.out[k][0] * SCALE);
+        tx[symbol_offset + 2 * k + 1] = static_cast<int16_t>(context.out[k][1] * SCALE);
     }
 }
 
@@ -205,11 +205,11 @@ void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &s
     }
 }
 
-int zadoff_sync(const float *__restrict signal_re, const float *__restrict signal_im, size_t signal_len, const float *__restrict zc_re, const float *__restrict zc_im, size_t zc_len, float* __restrict out_corr)
+int zadoff_sync(const float *__restrict signal_re, const float *__restrict signal_im, size_t signal_len, const float *__restrict zc_re, const float *__restrict zc_im, size_t zc_len, float *__restrict out_corr)
 {
     float max_norm = -1.f;
     int best_idx = 0;
-    
+
     for (size_t n = 0; n < signal_len - zc_len; ++n)
     {
         float sum_re = 0.0f;
@@ -258,19 +258,21 @@ void cfo_correction(std::vector<std::complex<float>> &in_signal, int subcarrar, 
     std::complex<float> corr = 0.0;
     int ofdm_symbol = subcarrar + cp;
     int cnt_ofdm_symbols = in_signal.size() / ofdm_symbol;
+    int sample_rate = 1920000;
 
-    for (size_t n = 0; n < in_signal.size(); n += ofdm_symbol)
+    for (int n = 0; n < cnt_ofdm_symbols; ++n)
     {
-        for (size_t i = n; i < n + cp; ++i)
-            corr += in_signal[i] * conj(in_signal[i + subcarrar]);
+        int start = n * ofdm_symbol;
+        for (int i = 0; i < cp; ++i)
+            corr += conj(in_signal[i + start]) * in_signal[i + start + subcarrar];
 
         float eps = arg(corr) / (2 * M_PI);
-        float mean_eps = eps / cnt_ofdm_symbols;
-
-        for (size_t i = n; i < n + ofdm_symbol; ++i)
+        float delta_f = eps * sample_rate / subcarrar;
+        
+        for (int i = 0; i < ofdm_symbol; ++i)
         {
-            in_signal[i] *= std::complex<float>(std::cos(mean_eps), std::sin(mean_eps));
-            cfo_offset.push_back(mean_eps);
+            float phase = -2 * M_PIf * delta_f * i / sample_rate;
+            in_signal[start + i] *= std::complex<float>(std::cos(phase), std::sin(phase));
         }
     }
 }
@@ -310,30 +312,96 @@ void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::comple
     }
 }
 
-void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar)
+void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar, std::vector<std::complex<float>> &out_signal)
 {
+    out_signal.clear();
+    out_signal.reserve(in_signal.size());
     int num_symbols = in_signal.size() / subcarrar;
-    std::vector<std::complex<float>> pilot_vals;
     std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
+    std::vector<bool> is_pilot(subcarrar, false);
 
-    for (size_t i = 0; i < pilot_idxs.size(); ++i)
-        pilot_vals.push_back(std::complex<float>(2.0, 0.0));
+    for (auto &x : pilot_idxs)
+        is_pilot[x] = true;
 
     for (int i = 0; i < num_symbols; ++i)
     {
-        float symbols_phase = 0;
-        int offset = i * subcarrar;
-        for (size_t j = 0; j < pilot_idxs.size(); ++j)
+        std::vector<std::complex<float>> H(subcarrar, {0.0, 0.0});
+        std::vector<std::complex<float>> equalized(subcarrar, {0.0, 0.0});
+
+        for (size_t p = 0; p < pilot_idxs.size(); ++p)
+            H[pilot_idxs[p]] = in_signal[i * subcarrar + pilot_idxs[p]] / std::complex<float>(1, 0);
+
+        for (size_t p = 0; p + 1 < pilot_idxs.size(); ++p)
         {
-            int pilot_idx = pilot_idxs[j];
-            std::complex<float> rx_pilot = in_signal[offset + pilot_idx];
-            symbols_phase += std::arg(rx_pilot * std::conj(pilot_vals[j]));
+            int k1 = pilot_idxs[p];
+            int k2 = pilot_idxs[p + 1];
+
+            std::complex<float> H1 = H[k1];
+            std::complex<float> H2 = H[k2];
+
+            for (int k = k1 + 1; k < k2; ++k)
+            {
+                if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
+                    continue;
+
+                float alpha = float(k - k1) / float(k2 - k1);
+                H[k] = H1 + alpha * (H2 - H1);
+            }
         }
 
-        float avg_phase = symbols_phase / pilot_idxs.size();
+        for (int k = 1; k < pilot_idxs.front(); ++k)
+        {
+            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
+                continue;
 
-        for (int k = 0; k < subcarrar; ++k)
-            in_signal[offset + k] *= std::polar(1.f, -avg_phase);
+            H[k] = H[pilot_idxs.front()];
+        }
+
+        for (int k = pilot_idxs.back() + 1; k < subcarrar; ++k)
+        {
+            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
+                continue;
+
+            H[k] = H[pilot_idxs.back()];
+        }
+
+        for (int k = 1; k < subcarrar; ++k)
+        {
+            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
+                continue;
+
+            equalized[k] = in_signal[i * subcarrar + k] / H[k];
+        }
+
+        float phase = 0;
+        int pilot_cnt = 0;
+
+        for (size_t k = 0; k < pilot_idxs.size(); ++k)
+        {
+            phase += std::arg(equalized[pilot_idxs[k]]);
+            pilot_cnt++;
+        }
+
+        phase /= pilot_cnt;
+
+        for (int k = 1; k < subcarrar; ++k)
+        {
+            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
+                continue;
+
+            equalized[k] *= std::exp(std::complex<float>(0.0, -phase));
+        }
+
+        for (int k = 1; k < subcarrar; ++k)
+        {
+            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
+                continue;
+
+            if (is_pilot[k])
+                continue;
+
+            out_signal.push_back(equalized[k]);
+        }
     }
 }
 
@@ -347,9 +415,9 @@ void remove_pilots(std::vector<std::complex<float>> &in_signal, int subcarar)
                     in_signal[j + i * subcarar] = {0.0, 0.0};
 }
 
-void split_to_float(const std::complex<float>* __restrict src, float* __restrict dst_re, float* __restrict dst_im, size_t n)
+void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n)
 {
-    const float* raw_src = reinterpret_cast<const float*>(src);
+    const float *raw_src = reinterpret_cast<const float *>(src);
 
     #pragma omp simd
     for (size_t i = 0; i < n; ++i)
@@ -359,7 +427,8 @@ void split_to_float(const std::complex<float>* __restrict src, float* __restrict
     }
 }
 
-void split_int16_t_to_float(const int16_t* src, float* dst_re, float* dst_im, size_t num_samples) {
+void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, size_t num_samples)
+{
     #pragma omp simd
     for (size_t i = 0; i < num_samples; ++i)
     {
@@ -367,4 +436,3 @@ void split_int16_t_to_float(const int16_t* src, float* dst_re, float* dst_im, si
         dst_im[i] = static_cast<float>(src[2 * i + 1]) / 32768.0f;
     }
 }
-

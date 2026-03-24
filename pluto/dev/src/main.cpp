@@ -214,8 +214,10 @@ void run_dsp(sharedData *sh_data)
     std::deque<int> bit_fifo;
     std::vector<int16_t> zadoff_chu_seq((sh_data->subcarrier + sh_data->cyclic_prefex) * 2);
     std::vector<std::complex<float>> rx_complex_remove_pss;
+    std::vector<std::complex<float>> rx_complex_cfo;
     std::vector<std::complex<float>> rx_complex_remove_cp;
     std::vector<std::complex<float>> rx_complex_fft;
+    std::vector<std::complex<float>> rx_complex_eq;
 
     std::vector<float> signal_re(sh_data->mtu, 0);
     std::vector<float> signal_im(sh_data->mtu, 0);
@@ -228,7 +230,7 @@ void run_dsp(sharedData *sh_data)
     append_symbol(zad_off_chu_context, zadoff_chu_seq, sh_data->cyclic_prefex, 0);
     split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
 
-    while (bit_fifo.size() < 1)
+    while (bit_fifo.size() < 10000)
         bit_fifo.push_back(rand() & 1);
 
     while (sh_data->changed_quit == false)
@@ -240,7 +242,7 @@ void run_dsp(sharedData *sh_data)
         }
 
         if (sh_data->form)
-        {   
+        {
             if (sh_data->changed_pss_symbols)
             {
                 append_symbol(zad_off_chu_context, sh_data->tx_buffer, sh_data->cyclic_prefex, 0);
@@ -293,10 +295,7 @@ void run_dsp(sharedData *sh_data)
             decode(rx_complex_remove_cp, rx_complex_fft, context);
 
             if (sh_data->equal)
-                equalization(rx_complex_fft, sh_data->subcarrier);
-
-            if (sh_data->rm_pilots)
-                remove_pilots(rx_complex_fft, sh_data->subcarrier);
+                equalization(rx_complex_fft, sh_data->subcarrier, rx_complex_eq);
 
             spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument, context_spectre);
 
@@ -309,9 +308,19 @@ void run_dsp(sharedData *sh_data)
                 if (sh_data->milisecs.size() == 1920)
                     sh_data->milisecs.erase(sh_data->milisecs.begin());
             }
-            sh_data->rx_complex_fft_gui.clear();
-            for (size_t i = 0; i < rx_complex_fft.size(); ++i)
-                sh_data->rx_complex_fft_gui.push_back(rx_complex_fft[i]);
+
+            if (sh_data->equal)
+            {
+                sh_data->rx_complex_fft_gui.clear();
+                for (size_t i = 0; i < rx_complex_eq.size(); ++i)
+                    sh_data->rx_complex_fft_gui.push_back(rx_complex_eq[i]);
+            }
+            else
+            {
+                sh_data->rx_complex_fft_gui.clear();
+                for (size_t i = 0; i < rx_complex_fft.size(); ++i)
+                    sh_data->rx_complex_fft_gui.push_back(rx_complex_fft[i]);
+            }
 
             sh_data->dsp = false;
             sh_data->form = true;
@@ -518,7 +527,6 @@ void run_gui(sharedData *sh_data)
                 const char *debug_mode = sh_data->debug ? "Debug Mode [ON]" : "Debug Mode [OFF]";
                 const char *cfo_correct = sh_data->cfo_cor ? "CFO Correction [ON]" : "CFO Correction [OFF]";
                 const char *equal_mode = sh_data->equal ? "Equalization [ON]" : "Equalization [OFF]";
-                const char *rm_pilot = sh_data->rm_pilots ? "Pilots Removing [ON]" : "Pilots Removing [OFF]";
                 const char *modulation_type = nullptr;
 
                 if (ImGui::Button(label_time, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
@@ -548,9 +556,6 @@ void run_gui(sharedData *sh_data)
 
                 if (ImGui::Button(equal_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->equal = !sh_data->equal;
-
-                if (ImGui::Button(rm_pilot, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                    sh_data->rm_pilots = !sh_data->rm_pilots;
 
                 ImGui::SeparatorText("Pre Modulation");
                 switch (sh_data->modul_type_TX)
