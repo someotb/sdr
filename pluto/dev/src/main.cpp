@@ -1,3 +1,8 @@
+#include "modulation.hpp"
+#include "sharedData.hpp"
+#include "types.hpp"
+#include "sdr.hpp"
+
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Types.h>
@@ -25,72 +30,9 @@
 #include "implot.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
-#include "modulation.hpp"
-#include "sdr.hpp"
 
 constexpr long long TIMEOUT = 400000;
 constexpr long long TX_DELAY = 4000000;
-
-struct sharedData
-{
-    ModulationType modul_type_TX = ModulationType::QPSK;
-    std::string device;
-    std::vector<std::string> devices;
-    std::vector<std::complex<float>> rx_complex;
-    std::vector<std::complex<float>> rx_complex_fft_gui;
-    std::vector<int16_t> tx_buffer;
-    std::vector<float> shifted_magnitude;
-    std::vector<float> argument;
-    std::vector<float> frequency_axis;
-    std::vector<float> zadoff_corr_arr;
-    std::vector<float> milisecs;
-    std::vector<float> cfo_offset;
-    std::atomic<bool> form = true;
-    std::atomic<bool> read = false;
-    std::atomic<bool> dsp = false;
-    bool changed_send = false;
-    bool changed_quit = false;
-    bool changed_rx_gain = false;
-    bool changed_tx_gain = false;
-    bool changed_rx_freq = false;
-    bool changed_tx_freq = false;
-    bool changed_sample_rate = false;
-    bool changed_rx_bandwidth = false;
-    bool changed_tx_bandwidth = false;
-    bool changed_modulation_type = false;
-    bool changed_pss_symbols = false;
-    bool changed_cont_time = true;
-    bool get_zadoff_pos_loopback = false;
-    bool get_zadoff_pos = false;
-    bool rm_pilots = false;
-    bool debug = false;
-    bool cfo_cor = false;
-    bool equal = false;
-    float rx_gain = 20.f;
-    float tx_gain = 80.f;
-    float rx_frequency = 777e6;
-    float tx_frequency = 777e6;
-    float sample_rate = 1.92e6;
-    float rx_bandwidth = 1e6;
-    float tx_bandwidth = 1e6;
-    int cyclic_prefex = 32;
-    int subcarrier = 128;
-    int sync_pos = 0;
-    int mtu = 1920;
-    int buffer = 3840;
-    int zadoff_chu_u = 3;
-
-    sharedData(size_t rx_mtu)
-    {
-        tx_buffer.resize(rx_mtu * 2, 0);
-        rx_complex.resize(rx_mtu, 0);
-        zadoff_corr_arr.resize(rx_mtu, 0);
-        rx_complex_fft_gui.resize(rx_mtu, 0);
-        shifted_magnitude.resize(rx_mtu, 0);
-        argument.resize(rx_mtu, 0);
-        frequency_axis.resize(rx_mtu, 0);
-    }
-};
 
 void run_backend(sharedData *sh_data)
 {
@@ -211,7 +153,7 @@ void run_dsp(sharedData *sh_data)
         sh_data->frequency_axis[i] = (i - sh_data->mtu / 2.0) * sh_data->sample_rate / sh_data->mtu;
 
     int ofdm_symbol = sh_data->subcarrier + sh_data->cyclic_prefex;
-    std::deque<int> bit_fifo;
+    std::vector<int> bits;
     std::vector<int16_t> zadoff_chu_seq((sh_data->subcarrier + sh_data->cyclic_prefex) * 2);
     std::vector<std::complex<float>> rx_complex_remove_pss;
     std::vector<std::complex<float>> rx_complex_cfo;
@@ -230,8 +172,9 @@ void run_dsp(sharedData *sh_data)
     append_symbol(zad_off_chu_context, zadoff_chu_seq, sh_data->cyclic_prefex, 0);
     split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
 
-    while (bit_fifo.size() < 10000)
-        bit_fifo.push_back(rand() & 1);
+    bits.reserve(100000);
+    for(int i = 0; i < 100000; ++i)
+        bits.push_back(rand() % 2);
 
     while (sh_data->changed_quit == false)
     {
@@ -243,12 +186,13 @@ void run_dsp(sharedData *sh_data)
 
         if (sh_data->form)
         {
+            size_t offset = 0;
             if (sh_data->changed_pss_symbols)
             {
                 append_symbol(zad_off_chu_context, sh_data->tx_buffer, sh_data->cyclic_prefex, 0);
                 for (int start = 2 * (ofdm_symbol); start < (sh_data->buffer); start += 2 * (ofdm_symbol))
                 {
-                    build_ofdm_symbol(bit_fifo, context, sh_data->modul_type_TX);
+                    build_ofdm_symbol(bits, offset, context, *sh_data);
                     append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
                 }
 
@@ -257,9 +201,9 @@ void run_dsp(sharedData *sh_data)
             }
             else
             {
-                for (int start = 0; start < (sh_data->buffer - sh_data->subcarrier + sh_data->cyclic_prefex); start += 2 * (sh_data->subcarrier + sh_data->cyclic_prefex))
+                for (int start = 0; start < sh_data->buffer - ofdm_symbol; start += 2 * ofdm_symbol)
                 {
-                    build_ofdm_symbol(bit_fifo, context, sh_data->modul_type_TX);
+                    build_ofdm_symbol(bits, offset, context, *sh_data);
                     append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
                 }
 
@@ -300,8 +244,8 @@ void run_dsp(sharedData *sh_data)
             spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument, context_spectre);
 
             auto end = std::chrono::steady_clock::now();
-
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
             if (sh_data->debug)
             {
                 sh_data->milisecs.push_back(duration.count() / 1e3);
@@ -585,8 +529,8 @@ void run_gui(sharedData *sh_data)
 
                 ImGui::InputInt("Cycle Prefix", &sh_data->cyclic_prefex, 1);
                 ImGui::InputInt("Subcarrier", &sh_data->subcarrier, 1);
-                ImGui::SeparatorText("SDR Configuration");
 
+                ImGui::SeparatorText("SDR Configuration");
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 if (ImGui::BeginCombo("##SDR Device", sh_data->device.c_str()))
                 {

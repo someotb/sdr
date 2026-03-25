@@ -42,6 +42,7 @@ target_link_libraries(implot PRIVATE imgui)
 set(MAIN_SOURCE_FILES
     ${SRC_DIR}/main.cpp
     ${SRC_DIR}/modulation.cpp
+    ${SRC_DIR}/fftlib.cpp
 )
 
 add_executable(main ${MAIN_SOURCE_FILES})

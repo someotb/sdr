@@ -1,64 +1,19 @@
 #pragma once
 
+#include "sharedData.hpp"
+#include "fftlib.hpp"
+
 #include <vector>
 #include <complex>
 #include <deque>
 #include <cstdint>
-#include <fftw3.h>
 #include <cmath>
 
-enum class ModulationType
-{
-    BPSK,
-    QPSK,
-    QAM16
-};
-
-struct FFT_Context
-{
-    int N;
-    fftwf_complex *in;
-    fftwf_complex *out;
-    fftwf_plan plan_forward;
-    fftwf_plan plan_backward;
-
-    FFT_Context(int n) : N(n)
-    {
-        in = fftwf_alloc_complex(N);
-        out = fftwf_alloc_complex(N);
-
-        plan_forward = fftwf_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_MEASURE);
-        plan_backward = fftwf_plan_dft_1d(N, in, out, FFTW_BACKWARD, FFTW_MEASURE);
-    }
-
-    ~FFT_Context()
-    {
-        fftwf_destroy_plan(plan_forward);
-        fftwf_destroy_plan(plan_backward);
-        fftwf_free(in);
-        fftwf_free(out);
-    }
-};
-
-/**
- * @brief Modulation mapper according to 3GPP TS 38.211 specification
- *
- * @param bits Input bit sequence
- * @param symbols Output std::complex symbols
- * @param modulation_type Type of modulation to use
- */
-
-std::complex<float> map_symbol(std::deque<int> &fifo, ModulationType mod);
-
-int bits_per_symbol(ModulationType type);
-
-void fft(FFT_Context &context);
-
-void ifft(FFT_Context &context);
+std::complex<float> map_symbol(const std::vector<int> &bits, size_t &offset, ModulationType mod);
 
 void build_pss_zadoff_chu(FFT_Context &context, int u);
 
-void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, ModulationType mod);
+void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context &context, sharedData &sh_data);
 
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start);
 
@@ -75,8 +30,6 @@ void remove_cp(std::vector<std::complex<float>> &signal, int cp, int subcarrar, 
 void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal, FFT_Context &context);
 
 void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar, std::vector<std::complex<float>> &out_signal);
-
-void remove_pilots(std::vector<std::complex<float>> &in_signal, int subcarar);
 
 void split_to_float(const std::complex<float>* __restrict src, float* __restrict dst_re, float* __restrict dst_im, size_t n);
 

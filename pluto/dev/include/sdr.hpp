@@ -2,8 +2,10 @@
 
 #include <SoapySDR/Constants.h>
 #include <SoapySDR/Device.h>
+#include <SoapySDR/Formats.h>
 #include <cstdint>
 #include <vector>
+#include <iostream>
 
 class SDRDevice {
 public:

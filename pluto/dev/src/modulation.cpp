@@ -1,4 +1,6 @@
 #include "modulation.hpp"
+#include "fftlib.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <complex.h>
@@ -13,84 +15,41 @@
 #include <algorithm>
 #include <iostream>
 
-// According to 3GPP TS 38.211 section 5.1.3:
-std::complex<float> map_symbol(std::deque<int> &fifo, ModulationType mod)
+std::complex<float> map_symbol(const std::vector<int> &bits, size_t &offset, ModulationType mod)
 {
     switch (mod)
     {
     case ModulationType::BPSK:
     {
-        int b = fifo.front();
-        fifo.pop_front();
-        float v = (1.0 - 2.0 * b) ;
-        return std::complex<float>(v, v) / std::sqrt(2.f);
+        int b = bits[offset]; ++offset;
+        float v = (1.0f - 2.0f * b); 
+        return std::complex<float>(v, v) / std::sqrt(2.0f);
     }
 
     case ModulationType::QPSK:
     {
-        int b0 = fifo.front();
-        fifo.pop_front();
-        int b1 = fifo.front();
-        fifo.pop_front();
-
+        int b0 = bits[offset % bits.size()]; ++offset;
+        int b1 = bits[offset % bits.size()]; ++offset;
         float real = (1.0 - 2.0 * b0);
         float imag = (1.0 - 2.0 * b1);
 
-        return std::complex<float>(real, imag) / std::sqrt(2.f);
+        return std::complex<float>(real, imag) / std::sqrt(2.0f);
     }
 
     case ModulationType::QAM16:
     {
-        int b0 = fifo.front();
-        fifo.pop_front();
-        int b1 = fifo.front();
-        fifo.pop_front();
-        int b2 = fifo.front();
-        fifo.pop_front();
-        int b3 = fifo.front();
-        fifo.pop_front();
-
+        int b0 = bits[offset % bits.size()]; ++offset;
+        int b1 = bits[offset % bits.size()]; ++offset;
+        int b2 = bits[offset % bits.size()]; ++offset;
+        int b3 = bits[offset % bits.size()]; ++offset;
         float real = (1 - 2 * b0) * (2 - (1 - 2 * b2));
         float imag = (1 - 2 * b1) * (2 - (1 - 2 * b3));
 
-        return std::complex<float>(real, imag) / std::sqrt(10.f);
+        return std::complex<float>(real, imag) / std::sqrt(10.0f);
     }
 
     default:
         throw std::runtime_error("unsupported modulation type");
-    }
-}
-
-int bits_per_symbol(ModulationType type)
-{
-    switch (type)
-    {
-    case ModulationType::BPSK:
-        return 1;
-    case ModulationType::QPSK:
-        return 2;
-    case ModulationType::QAM16:
-        return 4;
-    default:
-        throw std::invalid_argument("Unsapported modulation type");
-    }
-}
-
-void fft(FFT_Context &context)
-{
-    fftwf_execute(context.plan_forward);
-}
-
-void ifft(FFT_Context &context)
-{
-    fftwf_execute(context.plan_backward);
-
-    float scale = 1.0f / context.N;
-#pragma omp simd
-    for (int i = 0; i < context.N; ++i)
-    {
-        context.out[i][0] *= scale;
-        context.out[i][1] *= scale;
     }
 }
 
@@ -120,13 +79,13 @@ void build_pss_zadoff_chu(FFT_Context &context, int u)
     ifft(context);
 }
 
-void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, ModulationType mod)
+void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context &context, sharedData &sh_data)
 {
-    size_t needed = context.N * bits_per_symbol(mod);
-    std::deque<int> pilots = {1, -1, 1, 1, -1, 1, -1, -1};
+    std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
+    std::vector<bool> is_pilot(sh_data.subcarrier, false);
 
-    while (bit_fifo.size() < needed)
-        bit_fifo.push_back(rand() & 1);
+    for (auto &x : pilot_idxs)
+        is_pilot[x] = true;
 
     for (int k = 0; k < context.N; ++k)
     {
@@ -135,7 +94,7 @@ void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, Modulati
             context.in[k][0] = 0;
             context.in[k][1] = 0;
         }
-        else if (k == 4 || k == 12 || k == 20 || k == 28 || k == 100 || k == 108 || k == 116 || k == 124)
+        else if (is_pilot[k])
         {
             context.in[k][0] = 1.0;
             context.in[k][1] = 0.0;
@@ -147,7 +106,7 @@ void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, Modulati
         }
         else
         {
-            auto s = map_symbol(bit_fifo, mod);
+            auto s = map_symbol(bits, offset, sh_data.modul_type_TX);
             context.in[k][0] = s.real();
             context.in[k][1] = s.imag();
         }
@@ -158,7 +117,7 @@ void build_ofdm_symbol(std::deque<int> &bit_fifo, FFT_Context &context, Modulati
 
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start)
 {
-    float SCALE = 32768.f;
+    float SCALE = 16000.f;
     int N = context.N;
 
     #pragma omp simd
@@ -403,16 +362,6 @@ void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar, st
             out_signal.push_back(equalized[k]);
         }
     }
-}
-
-void remove_pilots(std::vector<std::complex<float>> &in_signal, int subcarar)
-{
-    std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
-    for (size_t i = 0; i < in_signal.size() / subcarar; ++i)
-        for (int j = 0; j < subcarar; ++j)
-            for (size_t k = 0; k < pilot_idxs.size(); ++k)
-                if ((j + i * subcarar) == (pilot_idxs[k] + i * subcarar))
-                    in_signal[j + i * subcarar] = {0.0, 0.0};
 }
 
 void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n)
