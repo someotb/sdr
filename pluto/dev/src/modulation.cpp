@@ -115,6 +115,35 @@ void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context
     ifft(context);
 }
 
+void build_ofdm_symbol_no_ifft(const std::vector<int> &bits, size_t &bit_offset, std::vector<float> &bits_mapped, const sharedData *sh_data)
+{
+    std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
+    std::vector<bool> is_pilot(sh_data->subcarrier, false);
+    for (auto &x : pilot_idxs) is_pilot[x] = true;
+
+    int sub = sh_data->subcarrier;
+    int num_symbols = sh_data->buffer / (sub * 2); 
+    
+    bits_mapped.clear();
+    bits_mapped.reserve(num_symbols * sub * 2);
+
+    for (int i = 0; i < num_symbols; ++i)
+    {
+        for (int k = 0; k < sub; ++k)
+        {
+            if (k > sub / 2 - 28 && k < sub / 2 + 27) continue;
+            if (is_pilot[k]) continue;
+            if (k == 0) continue;
+
+            auto s = map_symbol(bits, bit_offset, sh_data->modul_type_TX);
+            
+            bits_mapped.push_back(s.real());
+            bits_mapped.push_back(s.imag());
+        }
+    }
+}
+
+
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start)
 {
     float SCALE = 16000.f;
@@ -195,26 +224,30 @@ int zadoff_sync(const float *__restrict signal_re, const float *__restrict signa
     return best_idx;
 }
 
-void remove_pss(std::vector<std::complex<float>> &in_signal, int cp, int subcarrar, int pos, std::vector<std::complex<float>> &out_signal)
+void remove_pss(sharedData *sh_data, std::vector<std::complex<float>> &out_signal)
 {
+    int subcarrar = sh_data->subcarrier;
+    int cp = sh_data->cyclic_prefex;
     out_signal.clear();
-    out_signal.reserve(in_signal.size() - subcarrar - cp);
+    out_signal.reserve(sh_data->rx_complex.size() - subcarrar - cp);
 
-    if (pos == 0)
+    if (sh_data->sync_pos == 0)
     {
-        for (size_t i = subcarrar; i < in_signal.size(); ++i)
-            out_signal.push_back(in_signal[i]);
+        for (size_t i = subcarrar; i < sh_data->rx_complex.size(); ++i)
+            out_signal.push_back(sh_data->rx_complex[i]);
         return;
     }
 
-    for (size_t i = pos + subcarrar; i < in_signal.size(); ++i)
-        out_signal.push_back(in_signal[i]);
+    for (size_t i = sh_data->sync_pos + subcarrar; i < sh_data->rx_complex.size(); ++i)
+        out_signal.push_back(sh_data->rx_complex[i]);
 }
 
-void cfo_correction(std::vector<std::complex<float>> &in_signal, int subcarrar, int cp, std::vector<float> &cfo_offset)
+void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData *sh_data)
 {
-    cfo_offset.clear();
+    sh_data->cfo_offset.clear();
     std::complex<float> corr = 0.0;
+    int subcarrar = sh_data->subcarrier;
+    int cp = sh_data->cyclic_prefex;
     int ofdm_symbol = subcarrar + cp;
     int cnt_ofdm_symbols = in_signal.size() / ofdm_symbol;
     int sample_rate = 1920000;
@@ -228,27 +261,24 @@ void cfo_correction(std::vector<std::complex<float>> &in_signal, int subcarrar, 
         float eps = arg(corr) / (2 * M_PI);
         float delta_f = eps * sample_rate / subcarrar;
         
-        for (int i = 0; i < ofdm_symbol; ++i) // Вот тут i не должен сбрасываться, возможно...
+        for (int i = 0; i < ofdm_symbol; ++i)
         {
             float phase = -2 * M_PIf * delta_f * i / sample_rate;
+            sh_data->cfo_offset.push_back(phase);
             in_signal[start + i] *= std::complex<float>(std::cos(phase), std::sin(phase));
         }
     }
 }
 
-void remove_cp(std::vector<std::complex<float>> &in_signal, int cp, int subcarrar, std::vector<std::complex<float>> &out_signal)
+void remove_cp(std::vector<std::complex<float>> &in_signal, sharedData *sh_data, std::vector<std::complex<float>> &out_signal)
 {
     out_signal.clear();
-    size_t cnt_ofdm_symbols = in_signal.size() / (cp + subcarrar);
-    out_signal.reserve(in_signal.size() - cp * cnt_ofdm_symbols);
+    size_t cnt_ofdm_symbols = in_signal.size() / (sh_data->cyclic_prefex + sh_data->subcarrier);
+    out_signal.reserve(in_signal.size() - sh_data->cyclic_prefex * cnt_ofdm_symbols);
 
     for (size_t i = 0; i < cnt_ofdm_symbols; ++i)
-    {
-        for (int j = 0; j < subcarrar; ++j)
-        {
-            out_signal.push_back(in_signal[j + (i * subcarrar) + cp + (i * cp)]);
-        }
-    }
+        for (int j = 0; j < sh_data->subcarrier; ++j)
+            out_signal.push_back(in_signal[j + (i * sh_data->subcarrier) + sh_data->cyclic_prefex + (i * sh_data->cyclic_prefex)]);
 }
 
 void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal, FFT_Context &context)
@@ -383,5 +413,15 @@ void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, si
     {
         dst_re[i] = static_cast<float>(src[2 * i]) / 32768.0f;
         dst_im[i] = static_cast<float>(src[2 * i + 1]) / 32768.0f;
+    }
+}
+
+void check_bits(std::vector<float> &in_signal, std::vector<float> &bits, sharedData *sh_data)
+{
+    float eps = 0.6f;
+    for (size_t i = 0; i < in_signal.size(); ++i)
+    {
+        if (std::abs(in_signal[i] - bits[i]) > eps)
+            sh_data->err_cnt++;
     }
 }

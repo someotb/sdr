@@ -10,6 +10,7 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <iterator>
 #include <stdio.h>
 #include <stdlib.h>
@@ -173,7 +174,7 @@ void run_dsp(sharedData *sh_data)
     split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
 
     bits.reserve(100000);
-    for(int i = 0; i < 100000; ++i)
+    for(int i = 0; i < 1920 * 4; ++i)
         bits.push_back(rand() % 2);
 
     while (sh_data->changed_quit == false)
@@ -187,33 +188,32 @@ void run_dsp(sharedData *sh_data)
         if (sh_data->form)
         {
             size_t offset = 0;
+            size_t tmp_offset = offset;
+            int start_idx = 0;
+
             if (sh_data->changed_pss_symbols)
             {
                 append_symbol(zad_off_chu_context, sh_data->tx_buffer, sh_data->cyclic_prefex, 0);
-                for (int start = 2 * (ofdm_symbol); start < sh_data->buffer; start += 2 * ofdm_symbol)
-                {
-                    build_ofdm_symbol(bits, offset, context, sh_data);
-                    append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
-                }
-
-                sh_data->form = false;
-                sh_data->read = true;
+                start_idx = 2 * ofdm_symbol;
             }
-            else
+
+            for (int start = start_idx; start <= (int)sh_data->buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
             {
-                for (int start = 0; start < sh_data->buffer; start += 2 * ofdm_symbol)
-                {
-                    build_ofdm_symbol(bits, offset, context, sh_data);
-                    append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
-                }
+                build_ofdm_symbol(bits, offset, context, sh_data);
+                append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
+            }     
 
-                sh_data->form = false;
-                sh_data->read = true;
-            }
+            build_ofdm_symbol_no_ifft(bits, tmp_offset, sh_data->bits_to_check, sh_data);
+
+            sh_data->form = false;
+            sh_data->read = true;
         }
         if (sh_data->dsp)
         {
+            std::atomic_signal_fence(std::memory_order_seq_cst);
             auto start = std::chrono::steady_clock::now();
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+
             if (sh_data->get_zadoff_pos_loopback)
             {
                 split_to_float(sh_data->rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
@@ -230,20 +230,33 @@ void run_dsp(sharedData *sh_data)
             }
 
             // DSP Module
-            remove_pss(sh_data->rx_complex, sh_data->cyclic_prefex, sh_data->subcarrier, sh_data->sync_pos, rx_complex_remove_pss);
+            remove_pss(sh_data, rx_complex_remove_pss);
 
             if (sh_data->cfo_cor)
-                cfo_correction(rx_complex_remove_pss, sh_data->subcarrier, sh_data->cyclic_prefex, sh_data->cfo_offset);
+                cfo_correction(rx_complex_remove_pss, sh_data);
 
-            remove_cp(rx_complex_remove_pss, sh_data->cyclic_prefex, sh_data->subcarrier, rx_complex_remove_cp);
+            remove_cp(rx_complex_remove_pss, sh_data, rx_complex_remove_cp);
             decode(rx_complex_remove_cp, rx_complex_fft, context);
-
+            std::vector<float> signal_eq_float(rx_complex_fft.size());
+            
             if (sh_data->equal)
+            {
                 equalization(rx_complex_fft, sh_data->subcarrier, rx_complex_eq);
+                if (signal_eq_float.size() != rx_complex_eq.size() * 2)
+                    signal_eq_float.resize(rx_complex_eq.size() * 2);
+
+                std::memcpy(signal_eq_float.data(), rx_complex_eq.data(), rx_complex_eq.size() * sizeof(std::complex<float>));
+            }
+
+            if (sh_data->check_bits)
+                check_bits(signal_eq_float, sh_data->bits_to_check, sh_data);
 
             spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument, context_spectre);
-
+            
+            std::atomic_signal_fence(std::memory_order_seq_cst);
             auto end = std::chrono::steady_clock::now();
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
             if (sh_data->debug)
@@ -444,6 +457,10 @@ void run_gui(sharedData *sh_data)
                 }
             }
             ImGui::End();
+
+            if (ImGui::Begin("Error Counter"))
+                ImGui::Text("Error Counter: %d", sh_data->err_cnt);
+            ImGui::End();
         }
         ImPlot::PopColormap();
 
@@ -459,6 +476,7 @@ void run_gui(sharedData *sh_data)
                 const char *zadoff_chu = sh_data->get_zadoff_pos ? "Direct Mode [ON]" : "Direct Mode [OFF]";
                 const char *cfo_correct = sh_data->cfo_cor ? "CFO Correction [ON]" : "CFO Correction [OFF]";
                 const char *equal_mode = sh_data->equal ? "Equalization [ON]" : "Equalization [OFF]";
+                const char *check_bit = sh_data->check_bits ? "Bits Check [ON]" : "Bits Check [OFF]";
                 const char *modulation_type = nullptr;
 
                 if (ImGui::Button(label_time, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
@@ -469,6 +487,14 @@ void run_gui(sharedData *sh_data)
 
                 if (ImGui::Button(pss_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->changed_pss_symbols = !sh_data->changed_pss_symbols;
+
+                if (ImGui::Button(check_bit, ImVec2(ImGui::GetContentRegionAvail().x / 2, 0.f)))
+                    sh_data->check_bits = !sh_data->check_bits;
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Reset Error", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
+                    sh_data->err_cnt = 0;
 
                 ImGui::SeparatorText("ZadOff-Chu");
                 if (ImGui::Button("Loopback Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
@@ -613,13 +639,11 @@ void run_gui(sharedData *sh_data)
                 sh_data->debug = !sh_data->debug;
             
             float window_width = ImGui::GetWindowWidth();
-            ImGui::SameLine(window_width - ImGui::CalcTextSize("FPS: 0000 (0000.000 ms) Debug ").x);
+            ImGui::SameLine(window_width - ImGui::CalcTextSize("FPS: 0000 (0000.000 ms)").x);
             ImGui::Text("FPS: %.f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
 
             ImGui::EndMainMenuBar();
         }
-
-        // ImGui::ShowDemoWindow();
 
         ImGui::Render();
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);

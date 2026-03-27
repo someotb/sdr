@@ -15,6 +15,7 @@ struct sharedData
     std::vector<std::complex<float>> rx_complex;
     std::vector<std::complex<float>> rx_complex_fft_gui;
     std::vector<int16_t> tx_buffer;
+    std::vector<float> bits_to_check;
     std::vector<float> shifted_magnitude;
     std::vector<float> argument;
     std::vector<float> frequency_axis;
@@ -42,6 +43,7 @@ struct sharedData
     std::atomic<bool> debug = false;
     std::atomic<bool> cfo_cor = false;
     std::atomic<bool> equal = false;
+    std::atomic<bool> check_bits = false;
     float rx_gain = 20.f;
     float tx_gain = 80.f;
     float rx_frequency = 777e6;
@@ -55,6 +57,7 @@ struct sharedData
     int mtu = 1920;
     int buffer = 3840;
     int zadoff_chu_u = 3;
+    int err_cnt = 0;
 
     sharedData(size_t rx_mtu)
     {
