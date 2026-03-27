@@ -190,9 +190,9 @@ void run_dsp(sharedData *sh_data)
             if (sh_data->changed_pss_symbols)
             {
                 append_symbol(zad_off_chu_context, sh_data->tx_buffer, sh_data->cyclic_prefex, 0);
-                for (int start = 2 * (ofdm_symbol); start < (sh_data->buffer); start += 2 * (ofdm_symbol))
+                for (int start = 2 * (ofdm_symbol); start < sh_data->buffer; start += 2 * ofdm_symbol)
                 {
-                    build_ofdm_symbol(bits, offset, context, *sh_data);
+                    build_ofdm_symbol(bits, offset, context, sh_data);
                     append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
                 }
 
@@ -201,9 +201,9 @@ void run_dsp(sharedData *sh_data)
             }
             else
             {
-                for (int start = 0; start < sh_data->buffer - ofdm_symbol; start += 2 * ofdm_symbol)
+                for (int start = 0; start < sh_data->buffer; start += 2 * ofdm_symbol)
                 {
-                    build_ofdm_symbol(bits, offset, context, *sh_data);
+                    build_ofdm_symbol(bits, offset, context, sh_data);
                     append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
                 }
 
@@ -218,7 +218,7 @@ void run_dsp(sharedData *sh_data)
             {
                 split_to_float(sh_data->rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
                 zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(), sh_data->zadoff_corr_arr.data());
-                sh_data->sync_pos = zad_of_idx;
+                sh_data->sync_pos = zad_of_idx + sh_data->cyclic_prefex;
                 sh_data->get_zadoff_pos_loopback = false;
             }
 
@@ -226,7 +226,7 @@ void run_dsp(sharedData *sh_data)
             {
                 split_to_float(sh_data->rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
                 zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(), sh_data->zadoff_corr_arr.data());
-                sh_data->sync_pos = zad_of_idx;
+                sh_data->sync_pos = zad_of_idx + sh_data->cyclic_prefex;
             }
 
             // DSP Module
@@ -253,18 +253,7 @@ void run_dsp(sharedData *sh_data)
                     sh_data->milisecs.erase(sh_data->milisecs.begin());
             }
 
-            if (sh_data->equal)
-            {
-                sh_data->rx_complex_fft_gui.clear();
-                for (size_t i = 0; i < rx_complex_eq.size(); ++i)
-                    sh_data->rx_complex_fft_gui.push_back(rx_complex_eq[i]);
-            }
-            else
-            {
-                sh_data->rx_complex_fft_gui.clear();
-                for (size_t i = 0; i < rx_complex_fft.size(); ++i)
-                    sh_data->rx_complex_fft_gui.push_back(rx_complex_fft[i]);
-            }
+            sh_data->rx_complex_fft_gui = sh_data->equal ? rx_complex_eq : rx_complex_fft;
 
             sh_data->dsp = false;
             sh_data->form = true;
@@ -468,7 +457,6 @@ void run_gui(sharedData *sh_data)
                 const char *sdr_mode = sh_data->changed_send ? "SDR Mode | Transmission" : "SDR Mode | Receiving";
                 const char *pss_mode = sh_data->changed_pss_symbols ? "PSS Symbol [ON]" : "PSS Symbol [OFF]";
                 const char *zadoff_chu = sh_data->get_zadoff_pos ? "Direct Mode [ON]" : "Direct Mode [OFF]";
-                const char *debug_mode = sh_data->debug ? "Debug Mode [ON]" : "Debug Mode [OFF]";
                 const char *cfo_correct = sh_data->cfo_cor ? "CFO Correction [ON]" : "CFO Correction [OFF]";
                 const char *equal_mode = sh_data->equal ? "Equalization [ON]" : "Equalization [OFF]";
                 const char *modulation_type = nullptr;
@@ -481,10 +469,6 @@ void run_gui(sharedData *sh_data)
 
                 if (ImGui::Button(pss_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data->changed_pss_symbols = !sh_data->changed_pss_symbols;
-
-                ImGui::SeparatorText("Debug");
-                if (ImGui::Button(debug_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                    sh_data->debug = !sh_data->debug;
 
                 ImGui::SeparatorText("ZadOff-Chu");
                 if (ImGui::Button("Loopback Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
@@ -624,9 +608,14 @@ void run_gui(sharedData *sh_data)
                 style.ItemInnerSpacing = ImVec2(item_space_x_inn, item_space_y_inn);
                 ImGui::EndMenu();
             }
+
+            if (ImGui::Button("Debug Mode"))
+                sh_data->debug = !sh_data->debug;
+            
             float window_width = ImGui::GetWindowWidth();
-            ImGui::SameLine(window_width - ImGui::CalcTextSize("FPS: 0000 (0000.000 ms)").x);
+            ImGui::SameLine(window_width - ImGui::CalcTextSize("FPS: 0000 (0000.000 ms) Debug ").x);
             ImGui::Text("FPS: %.f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+
             ImGui::EndMainMenuBar();
         }
 

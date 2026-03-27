@@ -13,7 +13,7 @@ std::complex<float> map_symbol(const std::vector<int> &bits, size_t &offset, Mod
 
 void build_pss_zadoff_chu(FFT_Context &context, int u);
 
-void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context &context, sharedData &sh_data);
+void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context &context, const sharedData *sh_data);
 
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start);
 

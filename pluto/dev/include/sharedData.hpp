@@ -12,7 +12,6 @@ struct sharedData
     ModulationType modul_type_TX = ModulationType::QPSK;
     std::string device;
     std::vector<std::string> devices;
-    std::vector<float> gui_bits;
     std::vector<std::complex<float>> rx_complex;
     std::vector<std::complex<float>> rx_complex_fft_gui;
     std::vector<int16_t> tx_buffer;
@@ -59,7 +58,6 @@ struct sharedData
 
     sharedData(size_t rx_mtu)
     {
-        gui_bits.resize(mtu * 4, 0);
         tx_buffer.resize(rx_mtu * 2, 0);
         rx_complex.resize(rx_mtu, 0);
         zadoff_corr_arr.resize(rx_mtu, 0);

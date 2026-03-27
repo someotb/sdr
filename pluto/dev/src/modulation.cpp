@@ -79,10 +79,10 @@ void build_pss_zadoff_chu(FFT_Context &context, int u)
     ifft(context);
 }
 
-void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context &context, sharedData &sh_data)
+void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context &context, const sharedData *sh_data)
 {
     std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
-    std::vector<bool> is_pilot(sh_data.subcarrier, false);
+    std::vector<bool> is_pilot(sh_data->subcarrier, false);
 
     for (auto &x : pilot_idxs)
         is_pilot[x] = true;
@@ -106,7 +106,7 @@ void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context
         }
         else
         {
-            auto s = map_symbol(bits, offset, sh_data.modul_type_TX);
+            auto s = map_symbol(bits, offset, sh_data->modul_type_TX);
             context.in[k][0] = s.real();
             context.in[k][1] = s.imag();
         }
@@ -222,13 +222,13 @@ void cfo_correction(std::vector<std::complex<float>> &in_signal, int subcarrar, 
     for (int n = 0; n < cnt_ofdm_symbols; ++n)
     {
         int start = n * ofdm_symbol;
-        for (int i = 0; i < cp; ++i)
+        for (int i = 0; i < cp; ++i) 
             corr += conj(in_signal[i + start]) * in_signal[i + start + subcarrar];
 
         float eps = arg(corr) / (2 * M_PI);
         float delta_f = eps * sample_rate / subcarrar;
         
-        for (int i = 0; i < ofdm_symbol; ++i)
+        for (int i = 0; i < ofdm_symbol; ++i) // Вот тут i не должен сбрасываться, возможно...
         {
             float phase = -2 * M_PIf * delta_f * i / sample_rate;
             in_signal[start + i] *= std::complex<float>(std::cos(phase), std::sin(phase));
