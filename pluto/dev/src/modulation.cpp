@@ -53,29 +53,27 @@ std::complex<float> map_symbol(const std::vector<int> &bits, size_t &offset, Mod
     }
 }
 
-void build_pss_zadoff_chu(FFT_Context &context, int u)
+void build_pss_zadoff_chu(FFT_Context &context, sharedData *sh_data)
 {
-    const int N = context.N;
-    const int N_zc = N / 2;
-    const float inv_Nzc = 1.0f / N_zc;
-    const float pi_u = M_PIf32 * (float)u;
+    int N_zc = sh_data->subcarrier - 1;
+    int cf = N_zc % 2;
+    int q = 1;
 
-    #pragma omp simd
-    for (int i = 0; i < N; ++i)
+    for (int i = 0; i < context.N; ++i)
     {
         context.in[i][0] = 0.0f;
         context.in[i][1] = 0.0f;
     }
 
-    #pragma omp simd
     for (int n = 0; n < N_zc; ++n)
     {
-        float phase = -pi_u * n * (n + 1) * inv_Nzc;
-        float s, c;
-        sincosf(phase, &s, &c);
-        context.in[2 * n + 1][0] = c;
-        context.in[2 * n + 1][1] = s;
+        float phase = - (M_PIf * (float)sh_data->zadoff_chu_u * (float)n * (float)(n + cf + 2 * q)) / (float)N_zc;
+        float sin, cos;
+        sincosf(phase, &sin, &cos);
+        context.in[n][0] = cos;
+        context.in[n][1] = sin;
     }
+
     ifft(context);
 }
 

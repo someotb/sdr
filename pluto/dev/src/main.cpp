@@ -169,7 +169,7 @@ void run_dsp(sharedData *sh_data)
     std::vector<float> zc_im(sh_data->subcarrier + sh_data->cyclic_prefex, 0);
     int zad_of_idx = 0;
 
-    build_pss_zadoff_chu(zad_off_chu_context, sh_data->zadoff_chu_u);
+    build_pss_zadoff_chu(zad_off_chu_context, sh_data);
     append_symbol(zad_off_chu_context, zadoff_chu_seq, sh_data->cyclic_prefex, 0);
     split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
 
@@ -635,8 +635,13 @@ void run_gui(sharedData *sh_data)
                 ImGui::EndMenu();
             }
 
-            if (ImGui::Button("Debug Mode"))
-                sh_data->debug = !sh_data->debug;
+            if (ImGui::BeginMenu("Debug"))
+            {
+                if (ImGui::Button("Debug Mode"))
+                    sh_data->debug = !sh_data->debug;
+                ImGui::EndMenu();
+            }
+
             
             float window_width = ImGui::GetWindowWidth();
             ImGui::SameLine(window_width - ImGui::CalcTextSize("FPS: 0000 (0000.000 ms)").x);
