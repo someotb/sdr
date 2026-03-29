@@ -290,43 +290,15 @@ void run_gui(sharedData *sh_data)
     ImGui::CreateContext();
     ImPlot::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
-    ImGuiStyle &style = ImGui::GetStyle();
-    int wind_pad_x = 2;
-    int wind_pad_y = 2;
-    int frame_pad_x = 5;
-    int frame_pad_y = 4;
-    int item_space_x = 10;
-    int item_space_y = 6;
-    int item_space_x_inn = 2;
-    int item_space_y_inn = 4;
 
-    style.WindowRounding = 0.f;
-    style.WindowBorderSize = 0.0f;
-    style.WindowPadding = ImVec2(wind_pad_x, wind_pad_y);
-
-    style.FrameRounding = 3.f;
-    style.FrameBorderSize = 1.0f;
-    style.FramePadding = ImVec2(frame_pad_x, frame_pad_y);
-
-    style.ChildRounding = 0.f;
-    style.ScrollbarRounding = 0.f;
-    style.TabRounding = 0.f;
-    style.PopupBorderSize = 0.0f;
-    style.ItemSpacing = ImVec2(item_space_x, item_space_y);
-    style.ItemInnerSpacing = ImVec2(item_space_x_inn, item_space_y_inn);
-
-    static const ImVec4 plot_colors[2] = {
-        ImVec4(0.26f, 0.59f, 0.98f, 1.f),
-        ImVec4(1.f, 0.5f, 0.2f, 1.f)};
+    static const ImVec4 plot_colors[4] = {
+        ImVec4(0.26f, 0.65f, 0.98f, 1.00f), 
+        ImVec4(1.00f, 0.50f, 0.20f, 1.00f)
+    };
 
     ImPlot::AddColormap("PlotPalete", plot_colors, 2);
 
-    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.1f, 0.1f, 0.1f, 1.00f);
-    style.Colors[ImGuiCol_Border] = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
-    style.Colors[ImGuiCol_Text] = ImVec4(0.95f, 0.88f, 0.93f, 1.00f);
-
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
@@ -585,63 +557,12 @@ void run_gui(sharedData *sh_data)
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("View"))
-            {
-                ImGui::SeparatorText("Theme Colors");
-                if (ImGui::Button("Light Theme"))
-                    ImGui::StyleColorsLight();
-                ImGui::SameLine();
-                if (ImGui::Button("Dark Theme"))
-                    ImGui::StyleColorsDark();
-                ImGui::SameLine();
-                if (ImGui::Button("Classic Theme"))
-                    ImGui::StyleColorsClassic();
-
-                ImGui::SeparatorText("Window Settings");
-                ImGui::InputFloat("Window Rounding", &style.WindowRounding, 1);
-                ImGui::InputFloat("Window Border Size", &style.WindowBorderSize, 1);
-                ImGui::InputInt("Window Padding X", &wind_pad_x, 1);
-                ImGui::InputInt("Window Padding Y", &wind_pad_y, 1);
-                style.WindowPadding = ImVec2(wind_pad_x, wind_pad_y);
-
-                ImGui::SeparatorText("Frame Settings");
-                ImGui::InputFloat("Frame Rounding", &style.FrameRounding, 1);
-                ImGui::InputFloat("Frame Border Size", &style.FrameBorderSize, 1);
-                ImGui::InputInt("Frame Padding X", &frame_pad_x, 1);
-                ImGui::InputInt("Frame Padding Y", &frame_pad_y, 1);
-                style.FramePadding = ImVec2(frame_pad_x, frame_pad_y);
-
-                ImGui::SeparatorText("Child Settings");
-                ImGui::InputFloat("Child Rounding", &style.ChildRounding, 1);
-
-                ImGui::SeparatorText("Scrollbar Settings");
-                ImGui::InputFloat("Scrollbar Rounding", &style.ScrollbarRounding, 1);
-
-                ImGui::SeparatorText("Tab Settings");
-                ImGui::InputFloat("Tab Rounding", &style.TabRounding, 1);
-
-                ImGui::SeparatorText("Popup Settings");
-                ImGui::InputFloat("Popup Border Size", &style.PopupBorderSize, 1);
-
-                ImGui::SeparatorText("Item Settings");
-                ImGui::InputInt("Item Spacing X", &item_space_x, 1);
-                ImGui::InputInt("Item Spacing Y", &item_space_y, 1);
-                style.ItemSpacing = ImVec2(item_space_x, item_space_y);
-
-                ImGui::SeparatorText("Item Inner Settings");
-                ImGui::InputInt("Item Inner Spacing X", &item_space_x_inn, 1);
-                ImGui::InputInt("Item Inner Spacing Y", &item_space_y_inn, 1);
-                style.ItemInnerSpacing = ImVec2(item_space_x_inn, item_space_y_inn);
-                ImGui::EndMenu();
-            }
-
             if (ImGui::BeginMenu("Debug"))
             {
                 if (ImGui::Button("Debug Mode"))
                     sh_data->debug = !sh_data->debug;
                 ImGui::EndMenu();
             }
-
             
             float window_width = ImGui::GetWindowWidth();
             ImGui::SameLine(window_width - ImGui::CalcTextSize("FPS: 0000 (0000.000 ms)").x);
