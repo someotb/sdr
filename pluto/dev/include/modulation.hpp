@@ -2,14 +2,18 @@
 
 #include "sharedData.hpp"
 #include "fftlib.hpp"
+#include "types.hpp"
 
 #include <vector>
 #include <complex>
-#include <deque>
 #include <cstdint>
 #include <cmath>
 
+int bits_per_symbol(ModulationType mod);
+
 std::complex<float> map_symbol(const std::vector<int> &bits, size_t &offset, ModulationType mod);
+
+void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationType mod);
 
 void build_pss_zadoff_chu(FFT_Context &context, sharedData *sh_data);
 
@@ -37,4 +41,4 @@ void split_to_float(const std::complex<float>* __restrict src, float* __restrict
 
 void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, size_t num_samples);
 
-void check_bits(std::vector<float> &in_signal, std::vector<float> &bits, sharedData *sh_data);
+void check_bits(std::vector<float> &in_signal, std::vector<int> &bits, sharedData *sh_data);

@@ -15,6 +15,8 @@ struct sharedData
     std::vector<std::complex<float>> rx_complex;
     std::vector<std::complex<float>> rx_complex_fft_gui;
     std::vector<int16_t> tx_buffer;
+    std::vector<float> demaped_bits;
+    std::vector<int> bits;
     std::vector<float> bits_to_check;
     std::vector<float> shifted_magnitude;
     std::vector<float> argument;

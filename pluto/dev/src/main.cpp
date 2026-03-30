@@ -6,12 +6,12 @@
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Types.h>
-#include <algorithm>
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
-#include <iterator>
+#include <ctime>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -26,7 +26,6 @@
 #include <atomic>
 #include <cmath>
 #include <iostream>
-#include <fstream>
 #include "imgui.h"
 #include "implot.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -161,6 +160,7 @@ void run_dsp(sharedData *sh_data)
     std::vector<std::complex<float>> rx_complex_remove_cp;
     std::vector<std::complex<float>> rx_complex_fft;
     std::vector<std::complex<float>> rx_complex_eq;
+    std::vector<int> gen_bits;
 
     std::vector<float> signal_re(sh_data->mtu, 0);
     std::vector<float> signal_im(sh_data->mtu, 0);
@@ -173,9 +173,10 @@ void run_dsp(sharedData *sh_data)
     append_symbol(zad_off_chu_context, zadoff_chu_seq, sh_data->cyclic_prefex, 0);
     split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
 
-    bits.reserve(100000);
-    for(int i = 0; i < 1920 * 4; ++i)
-        bits.push_back(rand() % 2);
+    int gen_bits_need = sh_data->mtu * bits_per_symbol(sh_data->modul_type_TX);
+    sh_data->bits.resize(gen_bits_need);
+    for(int i = 0; i < gen_bits_need; ++i)
+        sh_data->bits[i] = rand() % 2;
 
     while (sh_data->changed_quit == false)
     {
@@ -185,10 +186,18 @@ void run_dsp(sharedData *sh_data)
             continue;
         }
 
+        if (sh_data->changed_modulation_type)
+        {
+            int bits_need = sh_data->mtu * bits_per_symbol(sh_data->modul_type_TX);
+            sh_data->bits.resize(bits_need);
+            for(int i = 0; i < bits_need; ++i)
+                sh_data->bits[i] = rand() % 2;
+            sh_data->changed_modulation_type = false;
+        }
+
         if (sh_data->form)
         {
             size_t offset = 0;
-            size_t tmp_offset = offset;
             int start_idx = 0;
 
             if (sh_data->changed_pss_symbols)
@@ -199,11 +208,9 @@ void run_dsp(sharedData *sh_data)
 
             for (int start = start_idx; start <= (int)sh_data->buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
             {
-                build_ofdm_symbol(bits, offset, context, sh_data);
+                build_ofdm_symbol(sh_data->bits, offset, context, sh_data);
                 append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
-            }     
-
-            build_ofdm_symbol_no_ifft(bits, tmp_offset, sh_data->bits_to_check, sh_data);
+            }
 
             sh_data->form = false;
             sh_data->read = true;
@@ -238,7 +245,7 @@ void run_dsp(sharedData *sh_data)
             remove_cp(rx_complex_remove_pss, sh_data, rx_complex_remove_cp);
             decode(rx_complex_remove_cp, rx_complex_fft, context);
             std::vector<float> signal_eq_float(rx_complex_fft.size());
-            
+
             if (sh_data->equal)
             {
                 equalization(rx_complex_fft, sh_data->subcarrier, rx_complex_eq);
@@ -246,13 +253,18 @@ void run_dsp(sharedData *sh_data)
                     signal_eq_float.resize(rx_complex_eq.size() * 2);
 
                 std::memcpy(signal_eq_float.data(), rx_complex_eq.data(), rx_complex_eq.size() * sizeof(std::complex<float>));
+
+                sh_data->demaped_bits.resize(signal_eq_float.size());
+                demap_symbols(signal_eq_float, sh_data->demaped_bits, sh_data->modul_type_TX);
             }
 
             if (sh_data->check_bits)
-                check_bits(signal_eq_float, sh_data->bits_to_check, sh_data);
+                check_bits(sh_data->demaped_bits, sh_data->bits, sh_data);
+
+            sh_data->rx_complex_fft_gui = sh_data->equal ? rx_complex_eq : rx_complex_fft;
 
             spectrum(sh_data->rx_complex, sh_data->shifted_magnitude, sh_data->argument, context_spectre);
-            
+
             std::atomic_signal_fence(std::memory_order_seq_cst);
             auto end = std::chrono::steady_clock::now();
             std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -265,8 +277,6 @@ void run_dsp(sharedData *sh_data)
                 if (sh_data->milisecs.size() == 1920)
                     sh_data->milisecs.erase(sh_data->milisecs.begin());
             }
-
-            sh_data->rx_complex_fft_gui = sh_data->equal ? rx_complex_eq : rx_complex_fft;
 
             sh_data->dsp = false;
             sh_data->form = true;
@@ -292,7 +302,7 @@ void run_gui(sharedData *sh_data)
     ImGuiIO &io = ImGui::GetIO();
 
     static const ImVec4 plot_colors[4] = {
-        ImVec4(0.26f, 0.65f, 0.98f, 1.00f), 
+        ImVec4(0.26f, 0.65f, 0.98f, 1.00f),
         ImVec4(1.00f, 0.50f, 0.20f, 1.00f)
     };
 
@@ -399,6 +409,8 @@ void run_gui(sharedData *sh_data)
             const float *debug_latency = reinterpret_cast<const float *>(sh_data->milisecs.data());
             const float *zadoff_chu = reinterpret_cast<const float *>(sh_data->zadoff_corr_arr.data());
             const float *cfo_cor = reinterpret_cast<const float *>(sh_data->cfo_offset.data());
+            const float *dem_bits = reinterpret_cast<const float *>(sh_data->demaped_bits.data());
+            const int *orig_bits = reinterpret_cast<const int *>(sh_data->bits.data());
 
             if (ImGui::Begin("Latency"))
             {
@@ -425,6 +437,17 @@ void run_gui(sharedData *sh_data)
                 if (ImPlot::BeginPlot("CFO Correction Array", ImVec2(ImGui::GetContentRegionAvail())))
                 {
                     ImPlot::PlotLine("CFO", cfo_cor, sh_data->cfo_offset.size());
+                    ImPlot::EndPlot();
+                }
+            }
+            ImGui::End();
+
+            if (ImGui::Begin("Demapped Bits"))
+            {
+                if (ImPlot::BeginPlot("Demapped Bits", ImVec2(ImGui::GetContentRegionAvail())))
+                {
+                    ImPlot::PlotLine("Demapped Bits", dem_bits, sh_data->demaped_bits.size());
+                    ImPlot::PlotLine("Original Bits", orig_bits, sh_data->bits.size());
                     ImPlot::EndPlot();
                 }
             }
@@ -501,11 +524,20 @@ void run_gui(sharedData *sh_data)
                 if (ImGui::BeginCombo("##Modulation Type", modulation_type))
                 {
                     if (ImGui::Selectable("BPSK", sh_data->modul_type_TX == ModulationType::BPSK))
+                    {
                         sh_data->modul_type_TX = ModulationType::BPSK;
+                        sh_data->changed_modulation_type = true;
+                    }
                     if (ImGui::Selectable("QPSK", sh_data->modul_type_TX == ModulationType::QPSK))
+                    {
                         sh_data->modul_type_TX = ModulationType::QPSK;
+                        sh_data->changed_modulation_type = true;
+                    }
                     if (ImGui::Selectable("QAM16", sh_data->modul_type_TX == ModulationType::QAM16))
+                    {
                         sh_data->modul_type_TX = ModulationType::QAM16;
+                        sh_data->changed_modulation_type = true;
+                    }
                     ImGui::EndCombo();
                 }
 
@@ -563,7 +595,7 @@ void run_gui(sharedData *sh_data)
                     sh_data->debug = !sh_data->debug;
                 ImGui::EndMenu();
             }
-            
+
             float window_width = ImGui::GetWindowWidth();
             ImGui::SameLine(window_width - ImGui::CalcTextSize("FPS: 0000 (0000.000 ms)").x);
             ImGui::Text("FPS: %.f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);

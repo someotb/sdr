@@ -1,7 +1,7 @@
 #include "modulation.hpp"
 #include "fftlib.hpp"
+#include "types.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <complex.h>
 #include <complex>
@@ -12,46 +12,96 @@
 #include <pstl/glue_algorithm_defs.h>
 #include <stdexcept>
 #include <vector>
-#include <algorithm>
-#include <iostream>
+
+int bits_per_symbol(ModulationType mod)
+{
+    switch (mod)
+    {
+        case ModulationType::BPSK: return 1;
+        case ModulationType::QPSK: return 2;
+        case ModulationType::QAM16: return 4;
+    }
+}
 
 std::complex<float> map_symbol(const std::vector<int> &bits, size_t &offset, ModulationType mod)
 {
     switch (mod)
     {
-    case ModulationType::BPSK:
-    {
-        int b = bits[offset]; ++offset;
-        float v = (1.0f - 2.0f * b); 
-        return std::complex<float>(v, v) / std::sqrt(2.0f);
-    }
+        case ModulationType::BPSK:
+        {
+            int b = bits[offset]; ++offset;
+            float v = (1.0f - 2.0f * b);
+            return std::complex<float>(v, v) / std::sqrt(2.0f);
+        }
 
-    case ModulationType::QPSK:
-    {
-        int b0 = bits[offset % bits.size()]; ++offset;
-        int b1 = bits[offset % bits.size()]; ++offset;
-        float real = (1.0 - 2.0 * b0);
-        float imag = (1.0 - 2.0 * b1);
+        case ModulationType::QPSK:
+        {
+            int b0 = bits[offset % bits.size()]; ++offset;
+            int b1 = bits[offset % bits.size()]; ++offset;
+            float real = (1.0f - 2.0f * b0);
+            float imag = (1.0f - 2.0f * b1);
 
-        return std::complex<float>(real, imag) / std::sqrt(2.0f);
-    }
+            return std::complex<float>(real, imag) / std::sqrt(2.0f);
+        }
 
-    case ModulationType::QAM16:
-    {
-        int b0 = bits[offset % bits.size()]; ++offset;
-        int b1 = bits[offset % bits.size()]; ++offset;
-        int b2 = bits[offset % bits.size()]; ++offset;
-        int b3 = bits[offset % bits.size()]; ++offset;
-        float real = (1 - 2 * b0) * (2 - (1 - 2 * b2));
-        float imag = (1 - 2 * b1) * (2 - (1 - 2 * b3));
+        case ModulationType::QAM16:
+        {
+            int b0 = bits[offset % bits.size()]; ++offset;
+            int b1 = bits[offset % bits.size()]; ++offset;
+            int b2 = bits[offset % bits.size()]; ++offset;
+            int b3 = bits[offset % bits.size()]; ++offset;
+            float real = (1.0f - 2.0f * b0) * (2.0f - (1.0f - 2.0f * b2));
+            float imag = (1.0f - 2.0f * b1) * (2.0f - (1.0f - 2.0f * b3));
 
-        return std::complex<float>(real, imag) / std::sqrt(10.0f);
-    }
+            return std::complex<float>(real, imag) / std::sqrt(10.0f);
+        }
 
     default:
-        throw std::runtime_error("unsupported modulation type");
+        throw std::runtime_error("[MAPPING] unsupported modulation type");
     }
 }
+
+void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationType mod)
+{
+    switch (mod)
+    {
+        case ModulationType::BPSK:
+        {
+            for (size_t i = 0; i < in.size() / 2; ++i)
+            {
+                std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * std::sqrt(2.0f);
+                float bit_i = (1 - tmp.real()) / 2;
+                float bit_q = (1 - tmp.imag()) / 2;
+                out[2 * i] = bit_i;
+                out[2 * i + 1] = bit_q;
+            }
+            return;
+        }
+        case ModulationType::QPSK:
+        {
+            for (size_t i = 0; i < in.size() / 2; ++i)
+            {
+                std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * std::sqrt(2.0f);
+                float bit_i = (1 - tmp.real()) / 2;
+                float bit_q = (1 - tmp.imag()) / 2;
+                out[2 * i] = bit_i;
+                out[2 * i + 1] = bit_q;
+            }
+            return;
+        }
+        case ModulationType::QAM16:
+        {
+            for (size_t i = 0; i < in.size() / 2; ++i)
+            {
+            }
+            return;
+        }
+
+    default:
+        throw std::runtime_error("[DEMAPPING] unsupported modulation type");
+    }
+}
+
 
 void build_pss_zadoff_chu(FFT_Context &context, sharedData *sh_data)
 {
@@ -120,8 +170,8 @@ void build_ofdm_symbol_no_ifft(const std::vector<int> &bits, size_t &bit_offset,
     for (auto &x : pilot_idxs) is_pilot[x] = true;
 
     int sub = sh_data->subcarrier;
-    int num_symbols = sh_data->buffer / (sub * 2); 
-    
+    int num_symbols = sh_data->buffer / (sub * 2);
+
     bits_mapped.clear();
     bits_mapped.reserve(num_symbols * sub * 2);
 
@@ -134,7 +184,7 @@ void build_ofdm_symbol_no_ifft(const std::vector<int> &bits, size_t &bit_offset,
             if (k == 0) continue;
 
             auto s = map_symbol(bits, bit_offset, sh_data->modul_type_TX);
-            
+
             bits_mapped.push_back(s.real());
             bits_mapped.push_back(s.imag());
         }
@@ -253,12 +303,12 @@ void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData *sh_
     for (int n = 0; n < cnt_ofdm_symbols; ++n)
     {
         int start = n * ofdm_symbol;
-        for (int i = 0; i < cp; ++i) 
+        for (int i = 0; i < cp; ++i)
             corr += conj(in_signal[i + start]) * in_signal[i + start + subcarrar];
 
         float eps = arg(corr) / (2 * M_PI);
         float delta_f = eps * sample_rate / subcarrar;
-        
+
         for (int i = 0; i < ofdm_symbol; ++i)
         {
             float phase = -2 * M_PIf * delta_f * i / sample_rate;
@@ -414,12 +464,12 @@ void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, si
     }
 }
 
-void check_bits(std::vector<float> &in_signal, std::vector<float> &bits, sharedData *sh_data)
+void check_bits(std::vector<float> &in_signal, std::vector<int> &bits, sharedData *sh_data)
 {
     float eps = 0.6f;
     for (size_t i = 0; i < in_signal.size(); ++i)
     {
-        if (std::abs(in_signal[i] - bits[i]) > eps)
+        if (std::abs(in_signal[i] - (float)bits[i]) > eps)
             sh_data->err_cnt++;
     }
 }
