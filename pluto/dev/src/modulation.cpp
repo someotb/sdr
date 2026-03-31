@@ -70,13 +70,12 @@ void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationTy
     {
         case ModulationType::BPSK:
         {
-            float sqrt2f = std::sqrt(2.0f);
             out.resize(in.size() / 2);
+            float sqrt2f = std::sqrt(2.0f);
             for (size_t i = 0; i < in.size() / 2; ++i)
             {
-                std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * sqrt2f;
-                float b0 = (1 - tmp.real()) / 2;
-                out[i] = b0;
+                float real = in[2 * i] * sqrt2f;
+                out[i] = (real < 0.0f) ? 1.0f : 0.0f;
             }
             return;
         }
@@ -85,9 +84,10 @@ void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationTy
             float sqrt2f = std::sqrt(2.0f);
             for (size_t i = 0; i < in.size() / 2; ++i)
             {
-                std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * sqrt2f;
-                float b0 = (1 - tmp.real()) / 2;
-                float b1 = (1 - tmp.imag()) / 2;
+                float real = in[2 * i] * sqrt2f;
+                float imag = in[2 * i + 1] * sqrt2f;
+                float b0 = (real < 0.0f) ? 1.0f : 0.0f;
+                float b1 = (imag < 0.0f) ? 1.0f : 0.0f;
                 out[2 * i] = b0;
                 out[2 * i + 1] = b1;
             }
@@ -95,12 +95,21 @@ void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationTy
         }
         case ModulationType::QAM16:
         {
+            out.resize(in.size() * 2);
             float sqrt10f = std::sqrt(10.0f);
             for (size_t i = 0; i < in.size() / 2; ++i)
             {
-                // std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * sqrt10f;
-                // float b0 = (1 - tmp.real()) / 2;
-                // float b1 = (1 - tmp.imag()) / 2;
+                float real = in[2 * i] * sqrt10f;
+                float imag = in[2 * i + 1] * sqrt10f;
+                float b0 = (real < 0.0f) ? 1.0f : 0.0f;
+                float b1 = (imag < 0.0f) ? 1.0f : 0.0f;
+                float b2 = (std::abs(real) > 2.0f) ? 1.0f : 0.0f;
+                float b3 = (std::abs(imag) > 2.0f) ? 1.0f : 0.0f;
+
+                out[4 * i] = b0;
+                out[4 * i + 1] = b1;
+                out[4 * i + 2] = b2;
+                out[4 * i + 3] = b3;
             }
             return;
         }
@@ -291,27 +300,29 @@ void remove_pss(sharedData *sh_data, std::vector<std::complex<float>> &out_signa
 void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData *sh_data)
 {
     sh_data->cfo_offset.clear();
-    std::complex<float> corr = 0.0;
     int subcarrar = sh_data->subcarrier;
     int cp = sh_data->cyclic_prefex;
     int sample_rate = sh_data->sample_rate;
     int ofdm_symbol = subcarrar + cp;
     int cnt_ofdm_symbols = in_signal.size() / ofdm_symbol;
+    float total_phase = 0.0f;
 
     for (int n = 0; n < cnt_ofdm_symbols; ++n)
     {
+        std::complex<float> corr = 0.0;
         int start = n * ofdm_symbol;
         for (int i = 0; i < cp; ++i)
             corr += conj(in_signal[i + start]) * in_signal[i + start + subcarrar];
 
-        float eps = arg(corr) / (2 * M_PI);
+        float eps = arg(corr) / (2.0f * M_PIf);
         float delta_f = eps * sample_rate / subcarrar;
+        float phase_step = -2 * M_PIf * delta_f / sample_rate;
 
         for (int i = 0; i < ofdm_symbol; ++i)
         {
-            float phase = -2 * M_PIf * delta_f * i / sample_rate;
-            sh_data->cfo_offset.push_back(phase);
-            in_signal[start + i] *= std::complex<float>(std::cos(phase), std::sin(phase));
+            total_phase += phase_step;
+            sh_data->cfo_offset.push_back(total_phase);
+            in_signal[start + i] *= std::complex<float>(std::cos(total_phase), std::sin(total_phase));
         }
     }
 }
@@ -462,10 +473,9 @@ void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, si
 
 void check_bits(std::vector<float> &in_signal, std::vector<int> &bits, sharedData *sh_data)
 {
-    float eps = 0.6f;
     for (size_t i = 0; i < in_signal.size(); ++i)
     {
-        if (std::abs(in_signal[i] - (float)bits[i]) > eps)
+        if (in_signal[i] != (float)bits[i])
             sh_data->err_cnt++;
     }
 }
