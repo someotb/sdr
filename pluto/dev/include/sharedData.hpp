@@ -24,6 +24,8 @@ struct sharedData
     std::vector<float> zadoff_corr_arr;
     std::vector<float> milisecs;
     std::vector<float> cfo_offset;
+    std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
+    std::vector<bool> is_pilot;
     std::atomic<bool> form = true;
     std::atomic<bool> read = false;
     std::atomic<bool> dsp = false;
@@ -63,6 +65,10 @@ struct sharedData
 
     sharedData(size_t rx_mtu)
     {
+        is_pilot.resize(128, false);
+        for (auto &x : pilot_idxs)
+            is_pilot[x] = true;
+
         tx_buffer.resize(rx_mtu * 2, 0);
         rx_complex.resize(rx_mtu, 0);
         zadoff_corr_arr.resize(rx_mtu, 0);

@@ -35,7 +35,7 @@ void remove_cp(std::vector<std::complex<float>> &signal, sharedData *sh_data, st
 
 void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal, FFT_Context &context);
 
-void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar, std::vector<std::complex<float>> &out_signal);
+void equalization(std::vector<std::complex<float>> &in_signal, const sharedData *sh_data, std::vector<std::complex<float>> &out_signal);
 
 void split_to_float(const std::complex<float>* __restrict src, float* __restrict dst_re, float* __restrict dst_im, size_t n);
 

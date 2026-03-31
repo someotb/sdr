@@ -1,5 +1,6 @@
 #include "modulation.hpp"
 #include "fftlib.hpp"
+#include "sharedData.hpp"
 #include "types.hpp"
 
 #include <cmath>
@@ -20,6 +21,8 @@ int bits_per_symbol(ModulationType mod)
         case ModulationType::BPSK: return 1;
         case ModulationType::QPSK: return 2;
         case ModulationType::QAM16: return 4;
+        default:
+            throw std::runtime_error("[BPS] unsupported modulation type");
     }
 }
 
@@ -67,32 +70,37 @@ void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationTy
     {
         case ModulationType::BPSK:
         {
+            float sqrt2f = std::sqrt(2.0f);
+            out.resize(in.size() / 2);
             for (size_t i = 0; i < in.size() / 2; ++i)
             {
-                std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * std::sqrt(2.0f);
-                float bit_i = (1 - tmp.real()) / 2;
-                float bit_q = (1 - tmp.imag()) / 2;
-                out[2 * i] = bit_i;
-                out[2 * i + 1] = bit_q;
+                std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * sqrt2f;
+                float b0 = (1 - tmp.real()) / 2;
+                out[i] = b0;
             }
             return;
         }
         case ModulationType::QPSK:
         {
+            float sqrt2f = std::sqrt(2.0f);
             for (size_t i = 0; i < in.size() / 2; ++i)
             {
-                std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * std::sqrt(2.0f);
-                float bit_i = (1 - tmp.real()) / 2;
-                float bit_q = (1 - tmp.imag()) / 2;
-                out[2 * i] = bit_i;
-                out[2 * i + 1] = bit_q;
+                std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * sqrt2f;
+                float b0 = (1 - tmp.real()) / 2;
+                float b1 = (1 - tmp.imag()) / 2;
+                out[2 * i] = b0;
+                out[2 * i + 1] = b1;
             }
             return;
         }
         case ModulationType::QAM16:
         {
+            float sqrt10f = std::sqrt(10.0f);
             for (size_t i = 0; i < in.size() / 2; ++i)
             {
+                // std::complex<float> tmp = std::complex<float>(in[2 * i], in[2 * i + 1]) * sqrt10f;
+                // float b0 = (1 - tmp.real()) / 2;
+                // float b1 = (1 - tmp.imag()) / 2;
             }
             return;
         }
@@ -129,12 +137,6 @@ void build_pss_zadoff_chu(FFT_Context &context, sharedData *sh_data)
 
 void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context &context, const sharedData *sh_data)
 {
-    std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
-    std::vector<bool> is_pilot(sh_data->subcarrier, false);
-
-    for (auto &x : pilot_idxs)
-        is_pilot[x] = true;
-
     for (int k = 0; k < context.N; ++k)
     {
         if (k > context.N / 2 - 28 && k < context.N / 2 + 27)
@@ -142,7 +144,7 @@ void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context
             context.in[k][0] = 0;
             context.in[k][1] = 0;
         }
-        else if (is_pilot[k])
+        else if (sh_data->is_pilot[k])
         {
             context.in[k][0] = 1.0;
             context.in[k][1] = 0.0;
@@ -165,10 +167,6 @@ void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context
 
 void build_ofdm_symbol_no_ifft(const std::vector<int> &bits, size_t &bit_offset, std::vector<float> &bits_mapped, const sharedData *sh_data)
 {
-    std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
-    std::vector<bool> is_pilot(sh_data->subcarrier, false);
-    for (auto &x : pilot_idxs) is_pilot[x] = true;
-
     int sub = sh_data->subcarrier;
     int num_symbols = sh_data->buffer / (sub * 2);
 
@@ -180,7 +178,7 @@ void build_ofdm_symbol_no_ifft(const std::vector<int> &bits, size_t &bit_offset,
         for (int k = 0; k < sub; ++k)
         {
             if (k > sub / 2 - 28 && k < sub / 2 + 27) continue;
-            if (is_pilot[k]) continue;
+            if (sh_data->is_pilot[k]) continue;
             if (k == 0) continue;
 
             auto s = map_symbol(bits, bit_offset, sh_data->modul_type_TX);
@@ -296,9 +294,9 @@ void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData *sh_
     std::complex<float> corr = 0.0;
     int subcarrar = sh_data->subcarrier;
     int cp = sh_data->cyclic_prefex;
+    int sample_rate = sh_data->sample_rate;
     int ofdm_symbol = subcarrar + cp;
     int cnt_ofdm_symbols = in_signal.size() / ofdm_symbol;
-    int sample_rate = 1920000;
 
     for (int n = 0; n < cnt_ofdm_symbols; ++n)
     {
@@ -349,29 +347,27 @@ void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::comple
     }
 }
 
-void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar, std::vector<std::complex<float>> &out_signal)
+void equalization(std::vector<std::complex<float>> &in_signal, const sharedData *sh_data, std::vector<std::complex<float>> &out_signal)
 {
     out_signal.clear();
     out_signal.reserve(in_signal.size());
-    int num_symbols = in_signal.size() / subcarrar;
-    std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
-    std::vector<bool> is_pilot(subcarrar, false);
 
-    for (auto &x : pilot_idxs)
-        is_pilot[x] = true;
+    int subcarrar = sh_data->subcarrier;
+
+    int num_symbols = in_signal.size() / subcarrar;
 
     for (int i = 0; i < num_symbols; ++i)
     {
         std::vector<std::complex<float>> H(subcarrar, {0.0, 0.0});
         std::vector<std::complex<float>> equalized(subcarrar, {0.0, 0.0});
 
-        for (size_t p = 0; p < pilot_idxs.size(); ++p)
-            H[pilot_idxs[p]] = in_signal[i * subcarrar + pilot_idxs[p]] / std::complex<float>(1, 0);
+        for (size_t p = 0; p < sh_data->pilot_idxs.size(); ++p)
+            H[sh_data->pilot_idxs[p]] = in_signal[i * subcarrar + sh_data->pilot_idxs[p]] / std::complex<float>(1, 0);
 
-        for (size_t p = 0; p + 1 < pilot_idxs.size(); ++p)
+        for (size_t p = 0; p + 1 < sh_data->pilot_idxs.size(); ++p)
         {
-            int k1 = pilot_idxs[p];
-            int k2 = pilot_idxs[p + 1];
+            int k1 = sh_data->pilot_idxs[p];
+            int k2 = sh_data->pilot_idxs[p + 1];
 
             std::complex<float> H1 = H[k1];
             std::complex<float> H2 = H[k2];
@@ -386,20 +382,20 @@ void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar, st
             }
         }
 
-        for (int k = 1; k < pilot_idxs.front(); ++k)
+        for (int k = 1; k < sh_data->pilot_idxs.front(); ++k)
         {
             if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
                 continue;
 
-            H[k] = H[pilot_idxs.front()];
+            H[k] = H[sh_data->pilot_idxs.front()];
         }
 
-        for (int k = pilot_idxs.back() + 1; k < subcarrar; ++k)
+        for (int k = sh_data->pilot_idxs.back() + 1; k < subcarrar; ++k)
         {
             if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
                 continue;
 
-            H[k] = H[pilot_idxs.back()];
+            H[k] = H[sh_data->pilot_idxs.back()];
         }
 
         for (int k = 1; k < subcarrar; ++k)
@@ -413,9 +409,9 @@ void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar, st
         float phase = 0;
         int pilot_cnt = 0;
 
-        for (size_t k = 0; k < pilot_idxs.size(); ++k)
+        for (size_t k = 0; k < sh_data->pilot_idxs.size(); ++k)
         {
-            phase += std::arg(equalized[pilot_idxs[k]]);
+            phase += std::arg(equalized[sh_data->pilot_idxs[k]]);
             pilot_cnt++;
         }
 
@@ -434,7 +430,7 @@ void equalization(std::vector<std::complex<float>> &in_signal, int subcarrar, st
             if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
                 continue;
 
-            if (is_pilot[k])
+            if (sh_data->is_pilot[k])
                 continue;
 
             out_signal.push_back(equalized[k]);

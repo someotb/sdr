@@ -186,19 +186,19 @@ void run_dsp(sharedData *sh_data)
             continue;
         }
 
-        if (sh_data->changed_modulation_type)
-        {
-            int bits_need = sh_data->mtu * bits_per_symbol(sh_data->modul_type_TX);
-            sh_data->bits.resize(bits_need);
-            for(int i = 0; i < bits_need; ++i)
-                sh_data->bits[i] = rand() % 2;
-            sh_data->changed_modulation_type = false;
-        }
-
         if (sh_data->form)
         {
             size_t offset = 0;
             int start_idx = 0;
+
+            if (sh_data->changed_modulation_type)
+            {
+                int bits_need = sh_data->mtu * bits_per_symbol(sh_data->modul_type_TX);
+                sh_data->bits.resize(bits_need);
+                for(int i = 0; i < bits_need; ++i)
+                    sh_data->bits[i] = rand() % 2;
+                sh_data->changed_modulation_type = false;
+            }
 
             if (sh_data->changed_pss_symbols)
             {
@@ -248,7 +248,7 @@ void run_dsp(sharedData *sh_data)
 
             if (sh_data->equal)
             {
-                equalization(rx_complex_fft, sh_data->subcarrier, rx_complex_eq);
+                equalization(rx_complex_fft, sh_data, rx_complex_eq);
                 if (signal_eq_float.size() != rx_complex_eq.size() * 2)
                     signal_eq_float.resize(rx_complex_eq.size() * 2);
 
@@ -410,7 +410,6 @@ void run_gui(sharedData *sh_data)
             const float *zadoff_chu = reinterpret_cast<const float *>(sh_data->zadoff_corr_arr.data());
             const float *cfo_cor = reinterpret_cast<const float *>(sh_data->cfo_offset.data());
             const float *dem_bits = reinterpret_cast<const float *>(sh_data->demaped_bits.data());
-            const int *orig_bits = reinterpret_cast<const int *>(sh_data->bits.data());
 
             if (ImGui::Begin("Latency"))
             {
@@ -444,10 +443,12 @@ void run_gui(sharedData *sh_data)
 
             if (ImGui::Begin("Demapped Bits"))
             {
+                int offset = 0;
+                int count = (int)sh_data->demaped_bits.size();
                 if (ImPlot::BeginPlot("Demapped Bits", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    ImPlot::PlotLine("Demapped Bits", dem_bits, sh_data->demaped_bits.size());
-                    ImPlot::PlotLine("Original Bits", orig_bits, sh_data->bits.size());
+                    ImPlot::PlotLine("RX", dem_bits, sh_data->demaped_bits.size());
+                    ImPlot::PlotLine("TX", &sh_data->bits[offset], count);
                     ImPlot::EndPlot();
                 }
             }
