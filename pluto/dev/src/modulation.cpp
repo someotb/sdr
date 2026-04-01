@@ -2,9 +2,11 @@
 #include "fftlib.hpp"
 #include "sharedData.hpp"
 #include "types.hpp"
+#include "prbs15.hpp"
 
 #include <cmath>
 #include <complex.h>
+#include <iostream>
 #include <complex>
 #include <cstddef>
 #include <cstdint>
@@ -63,6 +65,33 @@ std::complex<float> map_symbol(const std::vector<int> &bits, size_t &offset, Mod
         throw std::runtime_error("[MAPPING] unsupported modulation type");
     }
 }
+
+std::complex<float> map_symbol_prbs(PRBS15 &gen, ModulationType mod)
+{
+    switch (mod)
+    {
+        case ModulationType::BPSK: {
+            float v = 1.0f - 2.0f * gen.get_bit();
+            return std::complex<float>(v, v) / std::sqrt(2.0f);
+        }
+        case ModulationType::QPSK: {
+            float real = 1.0f - 2.0f * gen.get_bit();
+            float imag = 1.0f - 2.0f * gen.get_bit();
+            return std::complex<float>(real, imag) / std::sqrt(2.0f);
+        }
+        case ModulationType::QAM16: {
+            int b0 = gen.get_bit();
+            int b1 = gen.get_bit();
+            int b2 = gen.get_bit();
+            int b3 = gen.get_bit();
+            float real = (1.0f - 2.0f * b0) * (2.0f - (1.0f - 2.0f * b2));
+            float imag = (1.0f - 2.0f * b1) * (2.0f - (1.0f - 2.0f * b3));
+            return std::complex<float>(real, imag) / std::sqrt(10.0f);
+        }
+        default: throw std::runtime_error("Unsupported mod");
+    }
+}
+
 
 void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationType mod)
 {
@@ -144,11 +173,11 @@ void build_pss_zadoff_chu(FFT_Context &context, sharedData *sh_data)
     ifft(context);
 }
 
-void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context &context, const sharedData *sh_data)
+void build_ofdm_symbol(PRBS15 &gen, FFT_Context &context, const sharedData *sh_data)
 {
     for (int k = 0; k < context.N; ++k)
     {
-        if (k > context.N / 2 - 28 && k < context.N / 2 + 27)
+        if (sh_data->is_zeros[k])
         {
             context.in[k][0] = 0;
             context.in[k][1] = 0;
@@ -158,14 +187,9 @@ void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context
             context.in[k][0] = 1.0;
             context.in[k][1] = 0.0;
         }
-        else if (k == 0)
-        {
-            context.in[k][0] = 0;
-            context.in[k][1] = 0;
-        }
         else
         {
-            auto s = map_symbol(bits, offset, sh_data->modul_type_TX);
+            auto s = map_symbol_prbs(gen, sh_data->modul_type_TX);
             context.in[k][0] = s.real();
             context.in[k][1] = s.imag();
         }
@@ -173,31 +197,6 @@ void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context
 
     ifft(context);
 }
-
-void build_ofdm_symbol_no_ifft(const std::vector<int> &bits, size_t &bit_offset, std::vector<float> &bits_mapped, const sharedData *sh_data)
-{
-    int sub = sh_data->subcarrier;
-    int num_symbols = sh_data->buffer / (sub * 2);
-
-    bits_mapped.clear();
-    bits_mapped.reserve(num_symbols * sub * 2);
-
-    for (int i = 0; i < num_symbols; ++i)
-    {
-        for (int k = 0; k < sub; ++k)
-        {
-            if (k > sub / 2 - 28 && k < sub / 2 + 27) continue;
-            if (sh_data->is_pilot[k]) continue;
-            if (k == 0) continue;
-
-            auto s = map_symbol(bits, bit_offset, sh_data->modul_type_TX);
-
-            bits_mapped.push_back(s.real());
-            bits_mapped.push_back(s.imag());
-        }
-    }
-}
-
 
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start)
 {
@@ -281,19 +280,16 @@ int zadoff_sync(const float *__restrict signal_re, const float *__restrict signa
 
 void remove_pss(sharedData *sh_data, std::vector<std::complex<float>> &out_signal)
 {
-    int subcarrar = sh_data->subcarrier;
-    int cp = sh_data->cyclic_prefex;
+    int ofdm_symbol = sh_data->subcarrier + sh_data->cyclic_prefex;
     out_signal.clear();
-    out_signal.reserve(sh_data->rx_complex.size() - subcarrar - cp);
+    out_signal.reserve(sh_data->rx_complex.size() - ofdm_symbol);
 
-    if (sh_data->sync_pos == 0)
-    {
-        for (size_t i = subcarrar; i < sh_data->rx_complex.size(); ++i)
-            out_signal.push_back(sh_data->rx_complex[i]);
-        return;
-    }
+    int start_idx = sh_data->sync_pos + ofdm_symbol;
+    int rem_samples = sh_data->rx_complex.size() - start_idx;
+    int cnt_samples = rem_samples / ofdm_symbol;
+    int end_idx = start_idx + (cnt_samples * ofdm_symbol);
 
-    for (size_t i = sh_data->sync_pos + subcarrar; i < sh_data->rx_complex.size(); ++i)
+    for (int i = start_idx; i < end_idx; ++i)
         out_signal.push_back(sh_data->rx_complex[i]);
 }
 
@@ -364,90 +360,61 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
     out_signal.reserve(in_signal.size());
 
     int subcarrar = sh_data->subcarrier;
-
     int num_symbols = in_signal.size() / subcarrar;
 
     for (int i = 0; i < num_symbols; ++i)
     {
-        std::vector<std::complex<float>> H(subcarrar, {0.0, 0.0});
-        std::vector<std::complex<float>> equalized(subcarrar, {0.0, 0.0});
+        std::vector<std::complex<float>> H(subcarrar, {0.0f, 0.0f});
+        std::vector<std::complex<float>> equalized(subcarrar, {0.0f, 0.0f});
 
-        for (size_t p = 0; p < sh_data->pilot_idxs.size(); ++p)
-            H[sh_data->pilot_idxs[p]] = in_signal[i * subcarrar + sh_data->pilot_idxs[p]] / std::complex<float>(1, 0);
+        for (int p_idx : sh_data->pilot_idxs) {
+            H[p_idx] = in_signal[i * subcarrar + p_idx];
+        }
 
         for (size_t p = 0; p + 1 < sh_data->pilot_idxs.size(); ++p)
         {
             int k1 = sh_data->pilot_idxs[p];
             int k2 = sh_data->pilot_idxs[p + 1];
 
+            if ((k2 - k1) > 20)
+                continue;
+
             std::complex<float> H1 = H[k1];
             std::complex<float> H2 = H[k2];
 
             for (int k = k1 + 1; k < k2; ++k)
             {
-                if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
-                    continue;
+                if (sh_data->is_zeros[k]) continue;
 
                 float alpha = float(k - k1) / float(k2 - k1);
                 H[k] = H1 + alpha * (H2 - H1);
             }
         }
 
-        for (int k = 1; k < sh_data->pilot_idxs.front(); ++k)
-        {
-            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
-                continue;
-
-            H[k] = H[sh_data->pilot_idxs.front()];
-        }
-
-        for (int k = sh_data->pilot_idxs.back() + 1; k < subcarrar; ++k)
-        {
-            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
-                continue;
-
-            H[k] = H[sh_data->pilot_idxs.back()];
-        }
-
-        for (int k = 1; k < subcarrar; ++k)
-        {
-            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
-                continue;
-
+        for (int k = 0; k < subcarrar; ++k)
             equalized[k] = in_signal[i * subcarrar + k] / H[k];
-        }
 
         float phase = 0;
-        int pilot_cnt = 0;
+        for (int p_idx : sh_data->pilot_idxs) {
+            phase += std::arg(equalized[p_idx]);
+        }
+        phase /= sh_data->pilot_idxs.size();
 
-        for (size_t k = 0; k < sh_data->pilot_idxs.size(); ++k)
-        {
-            phase += std::arg(equalized[sh_data->pilot_idxs[k]]);
-            pilot_cnt++;
+        std::complex<float> phase_corr = std::exp(std::complex<float>(0.0f, -phase));
+        for (int k = 0; k < subcarrar; ++k) {
+            equalized[k] *= phase_corr;
         }
 
-        phase /= pilot_cnt;
-
-        for (int k = 1; k < subcarrar; ++k)
+        for (size_t k = 0; k < equalized.size(); ++k)
         {
-            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
-                continue;
-
-            equalized[k] *= std::exp(std::complex<float>(0.0, -phase));
-        }
-
-        for (int k = 1; k < subcarrar; ++k)
-        {
-            if (k > subcarrar / 2 - 28 && k < subcarrar / 2 + 27)
-                continue;
-
-            if (sh_data->is_pilot[k])
+            if (sh_data->is_zeros[k] || sh_data->is_pilot[k])
                 continue;
 
             out_signal.push_back(equalized[k]);
         }
     }
 }
+
 
 void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n)
 {
@@ -471,11 +438,25 @@ void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, si
     }
 }
 
-void check_bits(std::vector<float> &in_signal, std::vector<int> &bits, sharedData *sh_data)
+void get_bits_to_check(sharedData *sh_data)
 {
+    PRBS15 prbs_rx;
+
+    sh_data->bits.clear();
+    sh_data->bits.reserve(sh_data->demaped_bits.size());
+
+    for (size_t i = 0; i < sh_data->demaped_bits.size(); ++i)
+    {
+        sh_data->bits.push_back(prbs_rx.get_bit());
+    }
+}
+
+void check_bits(std::vector<float> &in_signal, sharedData *sh_data)
+{
+    sh_data->err_cnt = 0;
     for (size_t i = 0; i < in_signal.size(); ++i)
     {
-        if (in_signal[i] != (float)bits[i])
+        if (in_signal[i] != sh_data->bits[i])
             sh_data->err_cnt++;
     }
 }

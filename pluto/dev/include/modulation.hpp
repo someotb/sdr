@@ -4,10 +4,13 @@
 #include "fftlib.hpp"
 #include "types.hpp"
 
+#include <random>
 #include <vector>
 #include <complex>
 #include <cstdint>
 #include <cmath>
+
+#include "prbs15.hpp"
 
 int bits_per_symbol(ModulationType mod);
 
@@ -17,9 +20,7 @@ void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationTy
 
 void build_pss_zadoff_chu(FFT_Context &context, sharedData *sh_data);
 
-void build_ofdm_symbol(const std::vector<int> &bits, size_t &offset, FFT_Context &context, const sharedData *sh_data);
-
-void build_ofdm_symbol_no_ifft(const std::vector<int> &bits, size_t &bit_offset, std::vector<float> &bits_mapped, const sharedData *sh_data);
+void build_ofdm_symbol(PRBS15 &gen, FFT_Context &context, const sharedData *sh_data);
 
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start);
 
@@ -41,4 +42,6 @@ void split_to_float(const std::complex<float>* __restrict src, float* __restrict
 
 void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, size_t num_samples);
 
-void check_bits(std::vector<float> &in_signal, std::vector<int> &bits, sharedData *sh_data);
+void get_bits_to_check(sharedData *sh_data);
+
+void check_bits(std::vector<float> &in_signal, sharedData *sh_data);

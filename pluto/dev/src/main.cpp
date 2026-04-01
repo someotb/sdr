@@ -173,10 +173,7 @@ void run_dsp(sharedData *sh_data)
     append_symbol(zad_off_chu_context, zadoff_chu_seq, sh_data->cyclic_prefex, 0);
     split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
 
-    int gen_bits_need = sh_data->mtu * bits_per_symbol(sh_data->modul_type_TX);
-    sh_data->bits.resize(gen_bits_need);
-    for(int i = 0; i < gen_bits_need; ++i)
-        sh_data->bits[i] = rand() % 2;
+    PRBS15 prbs15;
 
     while (sh_data->changed_quit == false)
     {
@@ -188,17 +185,8 @@ void run_dsp(sharedData *sh_data)
 
         if (sh_data->form)
         {
-            size_t offset = 0;
             int start_idx = 0;
-
-            if (sh_data->changed_modulation_type)
-            {
-                int bits_need = sh_data->mtu * bits_per_symbol(sh_data->modul_type_TX);
-                sh_data->bits.resize(bits_need);
-                for(int i = 0; i < bits_need; ++i)
-                    sh_data->bits[i] = rand() % 2;
-                sh_data->changed_modulation_type = false;
-            }
+            prbs15.state = 0xACE1;
 
             if (sh_data->changed_pss_symbols)
             {
@@ -206,9 +194,9 @@ void run_dsp(sharedData *sh_data)
                 start_idx = 2 * ofdm_symbol;
             }
 
-            for (int start = start_idx; start <= (int)sh_data->buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
+            for (int start = start_idx; start <= sh_data->buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
             {
-                build_ofdm_symbol(sh_data->bits, offset, context, sh_data);
+                build_ofdm_symbol(prbs15, context, sh_data);
                 append_symbol(context, sh_data->tx_buffer, sh_data->cyclic_prefex, start);
             }
 
@@ -225,7 +213,7 @@ void run_dsp(sharedData *sh_data)
             {
                 split_to_float(sh_data->rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
                 zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(), sh_data->zadoff_corr_arr.data());
-                sh_data->sync_pos = zad_of_idx + sh_data->cyclic_prefex;
+                sh_data->sync_pos = zad_of_idx;
                 sh_data->get_zadoff_pos_loopback = false;
             }
 
@@ -233,10 +221,9 @@ void run_dsp(sharedData *sh_data)
             {
                 split_to_float(sh_data->rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
                 zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(), sh_data->zadoff_corr_arr.data());
-                sh_data->sync_pos = zad_of_idx + sh_data->cyclic_prefex;
+                sh_data->sync_pos = zad_of_idx;
             }
 
-            // DSP Module
             remove_pss(sh_data, rx_complex_remove_pss);
 
             if (sh_data->cfo_cor)
@@ -259,7 +246,10 @@ void run_dsp(sharedData *sh_data)
             }
 
             if (sh_data->check_bits)
-                check_bits(sh_data->demaped_bits, sh_data->bits, sh_data);
+            {
+                get_bits_to_check(sh_data);
+                check_bits(sh_data->demaped_bits, sh_data);
+            }
 
             sh_data->rx_complex_fft_gui = sh_data->equal ? rx_complex_eq : rx_complex_fft;
 
@@ -295,7 +285,7 @@ void run_gui(sharedData *sh_data)
         "GUI", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    SDL_GL_SetSwapInterval(0);
+    SDL_GL_SetSwapInterval(1);
 
     ImGui::CreateContext();
     ImPlot::CreateContext();
@@ -443,12 +433,10 @@ void run_gui(sharedData *sh_data)
 
             if (ImGui::Begin("Demapped Bits"))
             {
-                int offset = 0;
-                int count = (int)sh_data->demaped_bits.size();
                 if (ImPlot::BeginPlot("Demapped Bits", ImVec2(ImGui::GetContentRegionAvail())))
                 {
                     ImPlot::PlotLine("RX", dem_bits, sh_data->demaped_bits.size());
-                    ImPlot::PlotLine("TX", &sh_data->bits[offset], count);
+                    ImPlot::PlotLine("TX", sh_data->bits.data(), sh_data->bits.size());
                     ImPlot::EndPlot();
                 }
             }

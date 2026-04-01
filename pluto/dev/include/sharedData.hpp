@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 
+#include <numeric>
 #include <string>
 #include <atomic>
 #include <vector>
@@ -17,7 +18,6 @@ struct sharedData
     std::vector<int16_t> tx_buffer;
     std::vector<float> demaped_bits;
     std::vector<int> bits;
-    std::vector<float> bits_to_check;
     std::vector<float> shifted_magnitude;
     std::vector<float> argument;
     std::vector<float> frequency_axis;
@@ -25,7 +25,9 @@ struct sharedData
     std::vector<float> milisecs;
     std::vector<float> cfo_offset;
     std::vector<int> pilot_idxs = {4, 12, 20, 28, 100, 108, 116, 124};
+    std::vector<int> zeros_idxs;
     std::vector<bool> is_pilot;
+    std::vector<bool> is_zeros;
     std::atomic<bool> form = true;
     std::atomic<bool> read = false;
     std::atomic<bool> dsp = false;
@@ -68,6 +70,14 @@ struct sharedData
         is_pilot.resize(128, false);
         for (auto &x : pilot_idxs)
             is_pilot[x] = true;
+
+        zeros_idxs.resize((128 / 2 + 27) - (128 / 2 - 28));
+        std::iota(zeros_idxs.begin(), zeros_idxs.end(), (128 / 2 - 28));
+        is_zeros.resize(128, false);
+        for (auto &x : zeros_idxs)
+            is_zeros[x] = true;
+
+        is_zeros[0] = true;
 
         tx_buffer.resize(rx_mtu * 2, 0);
         rx_complex.resize(rx_mtu, 0);
