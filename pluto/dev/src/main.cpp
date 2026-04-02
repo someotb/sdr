@@ -8,7 +8,6 @@
 #include <SoapySDR/Types.h>
 #include <complex>
 #include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -18,7 +17,6 @@
 #include <complex.h>
 #include <math.h>
 #include <unistd.h>
-#include <vector>
 #include <string.h>
 #include <GL/glew.h>
 #include <SDL2/SDL.h>

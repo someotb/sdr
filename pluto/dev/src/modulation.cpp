@@ -6,12 +6,12 @@
 
 #include <cmath>
 #include <complex.h>
-#include <iostream>
 #include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <fftw3.h>
+#include <memory>
 #include <pstl/glue_algorithm_defs.h>
 #include <stdexcept>
 #include <vector>
@@ -284,13 +284,33 @@ void remove_pss(sharedData *sh_data, std::vector<std::complex<float>> &out_signa
     out_signal.clear();
     out_signal.reserve(sh_data->rx_complex.size() - ofdm_symbol);
 
-    int start_idx = sh_data->sync_pos + ofdm_symbol;
-    int rem_samples = sh_data->rx_complex.size() - start_idx;
-    int cnt_samples = rem_samples / ofdm_symbol;
-    int end_idx = start_idx + (cnt_samples * ofdm_symbol);
+    if (sh_data->sync_pos < ofdm_symbol)
+    {
+        int start_idx = sh_data->sync_pos + ofdm_symbol;
+        int rem_samples = sh_data->rx_complex.size() - start_idx;
+        int cnt_samples = rem_samples / ofdm_symbol;
+        int end_idx = start_idx + (cnt_samples * ofdm_symbol);
 
-    for (int i = start_idx; i < end_idx; ++i)
-        out_signal.push_back(sh_data->rx_complex[i]);
+        for (int i = start_idx; i < end_idx; ++i)
+            out_signal.push_back(sh_data->rx_complex[i]);
+    }
+    else
+    {
+        int left_rem_buf_cnt = int(sh_data->sync_pos / ofdm_symbol);
+        int left_start_idx = sh_data->sync_pos - left_rem_buf_cnt * ofdm_symbol;
+
+        for (int i = left_start_idx; i < sh_data->sync_pos; ++i)
+            out_signal.push_back(sh_data->rx_complex[i]);
+
+        int right_start_idx = sh_data->sync_pos + ofdm_symbol;
+
+        int rem_samples = sh_data->rx_complex.size() - right_start_idx;
+        int cnt_samples = rem_samples / ofdm_symbol;
+        int end_idx = right_start_idx + (cnt_samples * ofdm_symbol);
+
+        for (int i = right_start_idx; i < end_idx; ++i)
+            out_signal.push_back(sh_data->rx_complex[i]);
+    }
 }
 
 void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData *sh_data)
