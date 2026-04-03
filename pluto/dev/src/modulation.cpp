@@ -11,8 +11,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <fftw3.h>
-#include <memory>
-#include <pstl/glue_algorithm_defs.h>
 #include <stdexcept>
 #include <vector>
 
@@ -149,9 +147,9 @@ void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationTy
 }
 
 
-void build_pss_zadoff_chu(FFT_Context &context, sharedData *sh_data)
+void build_pss_zadoff_chu(FFT_Context &context, sharedData &sh_data)
 {
-    int N_zc = sh_data->subcarrier - 1;
+    int N_zc = sh_data.subcarrier - 1;
     int cf = N_zc % 2;
     int q = 1;
 
@@ -163,7 +161,7 @@ void build_pss_zadoff_chu(FFT_Context &context, sharedData *sh_data)
 
     for (int n = 0; n < N_zc; ++n)
     {
-        float phase = - (M_PIf * (float)sh_data->zadoff_chu_u * (float)n * (float)(n + cf + 2 * q)) / (float)N_zc;
+        float phase = - (M_PIf * (float)sh_data.zadoff_chu_u * (float)n * (float)(n + cf + 2 * q)) / (float)N_zc;
         float sin, cos;
         sincosf(phase, &sin, &cos);
         context.in[n][0] = cos;
@@ -173,23 +171,23 @@ void build_pss_zadoff_chu(FFT_Context &context, sharedData *sh_data)
     ifft(context);
 }
 
-void build_ofdm_symbol(PRBS15 &gen, FFT_Context &context, const sharedData *sh_data)
+void build_ofdm_symbol(PRBS15 &gen, FFT_Context &context, const sharedData &sh_data)
 {
     for (int k = 0; k < context.N; ++k)
     {
-        if (sh_data->is_zeros[k])
+        if (sh_data.is_zeros[k])
         {
             context.in[k][0] = 0;
             context.in[k][1] = 0;
         }
-        else if (sh_data->is_pilot[k])
+        else if (sh_data.is_pilot[k])
         {
             context.in[k][0] = 1.0;
             context.in[k][1] = 0.0;
         }
         else
         {
-            auto s = map_symbol_prbs(gen, sh_data->modul_type_TX);
+            auto s = map_symbol_prbs(gen, sh_data.modul_type_TX);
             context.in[k][0] = s.real();
             context.in[k][1] = s.imag();
         }
@@ -278,47 +276,47 @@ int zadoff_sync(const float *__restrict signal_re, const float *__restrict signa
     return best_idx;
 }
 
-void remove_pss(sharedData *sh_data, std::vector<std::complex<float>> &out_signal)
+void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &out_signal)
 {
-    int ofdm_symbol = sh_data->subcarrier + sh_data->cyclic_prefex;
+    int ofdm_symbol = sh_data.subcarrier + sh_data.cyclic_prefex;
     out_signal.clear();
-    out_signal.reserve(sh_data->rx_complex.size() - ofdm_symbol);
+    out_signal.reserve(sh_data.rx_complex.size() - ofdm_symbol);
 
-    if (sh_data->sync_pos < ofdm_symbol)
+    if (sh_data.sync_pos < ofdm_symbol)
     {
-        int start_idx = sh_data->sync_pos + ofdm_symbol;
-        int rem_samples = sh_data->rx_complex.size() - start_idx;
+        int start_idx = sh_data.sync_pos + ofdm_symbol;
+        int rem_samples = sh_data.rx_complex.size() - start_idx;
         int cnt_samples = rem_samples / ofdm_symbol;
         int end_idx = start_idx + (cnt_samples * ofdm_symbol);
 
         for (int i = start_idx; i < end_idx; ++i)
-            out_signal.push_back(sh_data->rx_complex[i]);
+            out_signal.push_back(sh_data.rx_complex[i]);
     }
     else
     {
-        int left_rem_buf_cnt = int(sh_data->sync_pos / ofdm_symbol);
-        int left_start_idx = sh_data->sync_pos - left_rem_buf_cnt * ofdm_symbol;
+        int left_rem_buf_cnt = int(sh_data.sync_pos / ofdm_symbol);
+        int left_start_idx = sh_data.sync_pos - left_rem_buf_cnt * ofdm_symbol;
 
-        for (int i = left_start_idx; i < sh_data->sync_pos; ++i)
-            out_signal.push_back(sh_data->rx_complex[i]);
+        for (int i = left_start_idx; i < sh_data.sync_pos; ++i)
+            out_signal.push_back(sh_data.rx_complex[i]);
 
-        int right_start_idx = sh_data->sync_pos + ofdm_symbol;
+        int right_start_idx = sh_data.sync_pos + ofdm_symbol;
 
-        int rem_samples = sh_data->rx_complex.size() - right_start_idx;
+        int rem_samples = sh_data.rx_complex.size() - right_start_idx;
         int cnt_samples = rem_samples / ofdm_symbol;
         int end_idx = right_start_idx + (cnt_samples * ofdm_symbol);
 
         for (int i = right_start_idx; i < end_idx; ++i)
-            out_signal.push_back(sh_data->rx_complex[i]);
+            out_signal.push_back(sh_data.rx_complex[i]);
     }
 }
 
-void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData *sh_data)
+void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData &sh_data)
 {
-    sh_data->cfo_offset.clear();
-    int subcarrar = sh_data->subcarrier;
-    int cp = sh_data->cyclic_prefex;
-    int sample_rate = sh_data->sample_rate;
+    sh_data.cfo_offset.clear();
+    int subcarrar = sh_data.subcarrier;
+    int cp = sh_data.cyclic_prefex;
+    int sample_rate = sh_data.sample_rate;
     int ofdm_symbol = subcarrar + cp;
     int cnt_ofdm_symbols = in_signal.size() / ofdm_symbol;
     float total_phase = 0.0f;
@@ -337,21 +335,21 @@ void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData *sh_
         for (int i = 0; i < ofdm_symbol; ++i)
         {
             total_phase += phase_step;
-            sh_data->cfo_offset.push_back(total_phase);
+            sh_data.cfo_offset.push_back(total_phase);
             in_signal[start + i] *= std::complex<float>(std::cos(total_phase), std::sin(total_phase));
         }
     }
 }
 
-void remove_cp(std::vector<std::complex<float>> &in_signal, sharedData *sh_data, std::vector<std::complex<float>> &out_signal)
+void remove_cp(std::vector<std::complex<float>> &in_signal, sharedData &sh_data, std::vector<std::complex<float>> &out_signal)
 {
     out_signal.clear();
-    size_t cnt_ofdm_symbols = in_signal.size() / (sh_data->cyclic_prefex + sh_data->subcarrier);
-    out_signal.reserve(in_signal.size() - sh_data->cyclic_prefex * cnt_ofdm_symbols);
+    size_t cnt_ofdm_symbols = in_signal.size() / (sh_data.cyclic_prefex + sh_data.subcarrier);
+    out_signal.reserve(in_signal.size() - sh_data.cyclic_prefex * cnt_ofdm_symbols);
 
     for (size_t i = 0; i < cnt_ofdm_symbols; ++i)
-        for (int j = 0; j < sh_data->subcarrier; ++j)
-            out_signal.push_back(in_signal[j + (i * sh_data->subcarrier) + sh_data->cyclic_prefex + (i * sh_data->cyclic_prefex)]);
+        for (int j = 0; j < sh_data.subcarrier; ++j)
+            out_signal.push_back(in_signal[j + (i * sh_data.subcarrier) + sh_data.cyclic_prefex + (i * sh_data.cyclic_prefex)]);
 }
 
 void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal, FFT_Context &context)
@@ -374,12 +372,12 @@ void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::comple
     }
 }
 
-void equalization(std::vector<std::complex<float>> &in_signal, const sharedData *sh_data, std::vector<std::complex<float>> &out_signal)
+void equalization(std::vector<std::complex<float>> &in_signal, const sharedData &sh_data, std::vector<std::complex<float>> &out_signal)
 {
     out_signal.clear();
     out_signal.reserve(in_signal.size());
 
-    int subcarrar = sh_data->subcarrier;
+    int subcarrar = sh_data.subcarrier;
     int num_symbols = in_signal.size() / subcarrar;
 
     for (int i = 0; i < num_symbols; ++i)
@@ -387,14 +385,14 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
         std::vector<std::complex<float>> H(subcarrar, {0.0f, 0.0f});
         std::vector<std::complex<float>> equalized(subcarrar, {0.0f, 0.0f});
 
-        for (int p_idx : sh_data->pilot_idxs) {
+        for (int p_idx : sh_data.pilot_idxs) {
             H[p_idx] = in_signal[i * subcarrar + p_idx];
         }
 
-        for (size_t p = 0; p + 1 < sh_data->pilot_idxs.size(); ++p)
+        for (size_t p = 0; p + 1 < sh_data.pilot_idxs.size(); ++p)
         {
-            int k1 = sh_data->pilot_idxs[p];
-            int k2 = sh_data->pilot_idxs[p + 1];
+            int k1 = sh_data.pilot_idxs[p];
+            int k2 = sh_data.pilot_idxs[p + 1];
 
             if ((k2 - k1) > 20)
                 continue;
@@ -404,7 +402,7 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
 
             for (int k = k1 + 1; k < k2; ++k)
             {
-                if (sh_data->is_zeros[k]) continue;
+                if (sh_data.is_zeros[k]) continue;
 
                 float alpha = float(k - k1) / float(k2 - k1);
                 H[k] = H1 + alpha * (H2 - H1);
@@ -415,10 +413,10 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
             equalized[k] = in_signal[i * subcarrar + k] / H[k];
 
         float phase = 0;
-        for (int p_idx : sh_data->pilot_idxs) {
+        for (int p_idx : sh_data.pilot_idxs) {
             phase += std::arg(equalized[p_idx]);
         }
-        phase /= sh_data->pilot_idxs.size();
+        phase /= sh_data.pilot_idxs.size();
 
         std::complex<float> phase_corr = std::exp(std::complex<float>(0.0f, -phase));
         for (int k = 0; k < subcarrar; ++k) {
@@ -427,7 +425,7 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
 
         for (size_t k = 0; k < equalized.size(); ++k)
         {
-            if (sh_data->is_zeros[k] || sh_data->is_pilot[k])
+            if (sh_data.is_zeros[k] || sh_data.is_pilot[k])
                 continue;
 
             out_signal.push_back(equalized[k]);
@@ -458,25 +456,25 @@ void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, si
     }
 }
 
-void get_bits_to_check(sharedData *sh_data)
+void get_bits_to_check(sharedData &sh_data)
 {
     PRBS15 prbs_rx;
 
-    sh_data->bits.clear();
-    sh_data->bits.reserve(sh_data->demaped_bits.size());
+    sh_data.bits.clear();
+    sh_data.bits.reserve(sh_data.demaped_bits.size());
 
-    for (size_t i = 0; i < sh_data->demaped_bits.size(); ++i)
+    for (size_t i = 0; i < sh_data.demaped_bits.size(); ++i)
     {
-        sh_data->bits.push_back(prbs_rx.get_bit());
+        sh_data.bits.push_back(prbs_rx.get_bit());
     }
 }
 
-void check_bits(std::vector<float> &in_signal, sharedData *sh_data)
+void check_bits(std::vector<float> &in_signal, sharedData &sh_data)
 {
-    sh_data->err_cnt = 0;
+    sh_data.err_cnt = 0;
     for (size_t i = 0; i < in_signal.size(); ++i)
     {
-        if (in_signal[i] != sh_data->bits[i])
-            sh_data->err_cnt++;
+        if (in_signal[i] != sh_data.bits[i])
+            sh_data.err_cnt++;
     }
 }

@@ -28,28 +28,7 @@ struct sharedData
     std::vector<int> zeros_idxs;
     std::vector<bool> is_pilot;
     std::vector<bool> is_zeros;
-    std::atomic<bool> form = true;
-    std::atomic<bool> read = false;
-    std::atomic<bool> dsp = false;
-    std::atomic<bool> changed_send = false;
-    std::atomic<bool> changed_quit = false;
-    std::atomic<bool> changed_rx_gain = false;
-    std::atomic<bool> changed_tx_gain = false;
-    std::atomic<bool> changed_rx_freq = false;
-    std::atomic<bool> changed_tx_freq = false;
-    std::atomic<bool> changed_sample_rate = false;
-    std::atomic<bool> changed_rx_bandwidth = false;
-    std::atomic<bool> changed_tx_bandwidth = false;
-    std::atomic<bool> changed_modulation_type = false;
-    std::atomic<bool> changed_pss_symbols = false;
-    std::atomic<bool> changed_cont_time = true;
-    std::atomic<bool> get_zadoff_pos_loopback = false;
-    std::atomic<bool> get_zadoff_pos = false;
-    std::atomic<bool> rm_pilots = false;
-    std::atomic<bool> debug = false;
-    std::atomic<bool> cfo_cor = false;
-    std::atomic<bool> equal = false;
-    std::atomic<bool> check_bits = false;
+
     float rx_gain = 20.f;
     float tx_gain = 80.f;
     float rx_frequency = 777e6;
@@ -64,6 +43,32 @@ struct sharedData
     int buffer = 3840;
     int zadoff_chu_u = 3;
     int err_cnt = 0;
+
+    struct flags
+    {
+        std::atomic<bool> form = true;
+        std::atomic<bool> read = false;
+        std::atomic<bool> dsp = false;
+        std::atomic<bool> changed_send = false;
+        std::atomic<bool> changed_quit = false;
+        std::atomic<bool> changed_rx_gain = false;
+        std::atomic<bool> changed_tx_gain = false;
+        std::atomic<bool> changed_rx_freq = false;
+        std::atomic<bool> changed_tx_freq = false;
+        std::atomic<bool> changed_sample_rate = false;
+        std::atomic<bool> changed_rx_bandwidth = false;
+        std::atomic<bool> changed_tx_bandwidth = false;
+        std::atomic<bool> changed_modulation_type = false;
+        std::atomic<bool> changed_pss_symbols = false;
+        std::atomic<bool> changed_cont_time = true;
+        std::atomic<bool> get_zadoff_pos_loopback = false;
+        std::atomic<bool> get_zadoff_pos = false;
+        std::atomic<bool> rm_pilots = false;
+        std::atomic<bool> debug = false;
+        std::atomic<bool> cfo_cor = false;
+        std::atomic<bool> equal = false;
+        std::atomic<bool> check_bits = false;
+    } flags;
 
     sharedData(size_t rx_mtu)
     {
