@@ -506,6 +506,9 @@ void run_gui(sharedData &sh_data)
                 case ModulationType::QAM16:
                     modulation_type = "Modulation: QAM16";
                     break;
+                case ModulationType::QAM64:
+                    modulation_type = "Modulation: QAM64";
+                    break;
                 }
 
                 ImGui::SetNextItemWidth(-FLT_MIN);
@@ -524,6 +527,11 @@ void run_gui(sharedData &sh_data)
                     if (ImGui::Selectable("QAM16", sh_data.modul_type_TX == ModulationType::QAM16))
                     {
                         sh_data.modul_type_TX = ModulationType::QAM16;
+                        sh_data.flags.changed_modulation_type = true;
+                    }
+                    if (ImGui::Selectable("QAM64", sh_data.modul_type_TX == ModulationType::QAM64))
+                    {
+                        sh_data.modul_type_TX = ModulationType::QAM64;
                         sh_data.flags.changed_modulation_type = true;
                     }
                     ImGui::EndCombo();

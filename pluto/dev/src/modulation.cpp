@@ -59,8 +59,22 @@ std::complex<float> map_symbol(const std::vector<int> &bits, size_t &offset, Mod
             return std::complex<float>(real, imag) / std::sqrt(10.0f);
         }
 
-    default:
-        throw std::runtime_error("[MAPPING] unsupported modulation type");
+        case ModulationType::QAM64:
+        {
+            int b0 = bits[offset % bits.size()]; ++offset;
+            int b1 = bits[offset % bits.size()]; ++offset;
+            int b2 = bits[offset % bits.size()]; ++offset;
+            int b3 = bits[offset % bits.size()]; ++offset;
+            int b4 = bits[offset % bits.size()]; ++offset;
+            int b5 = bits[offset % bits.size()]; ++offset;
+            float real = (1.0f - 2.0f * b0) * (4.0f - (1.0f - 2.0f * b2) * (2.0f - (1.0f - 2.0f * b4)));
+            float imag = (1.0f - 2.0f * b1) * (4.0f - (1.0f - 2.0f * b3) * (2.0f - (1.0f - 2.0f * b5)));
+
+            return std::complex<float>(real, imag) / std::sqrt(42.0f);
+        }
+
+        default:
+            throw std::runtime_error("[MAPPING] unsupported modulation type");
     }
 }
 
@@ -85,6 +99,17 @@ std::complex<float> map_symbol_prbs(PRBS15 &gen, ModulationType mod)
             float real = (1.0f - 2.0f * b0) * (2.0f - (1.0f - 2.0f * b2));
             float imag = (1.0f - 2.0f * b1) * (2.0f - (1.0f - 2.0f * b3));
             return std::complex<float>(real, imag) / std::sqrt(10.0f);
+        }
+        case ModulationType::QAM64: {
+            int b0 = gen.get_bit();
+            int b1 = gen.get_bit();
+            int b2 = gen.get_bit();
+            int b3 = gen.get_bit();
+            int b4 = gen.get_bit();
+            int b5 = gen.get_bit();
+            float real = (1.0f - 2.0f * b0) * (4.0f - (1.0f - 2.0f * b2) * (2.0f - (1.0f - 2.0f * b4)));
+            float imag = (1.0f - 2.0f * b1) * (4.0f - (1.0f - 2.0f * b3) * (2.0f - (1.0f - 2.0f * b5)));
+            return std::complex<float>(real, imag) / std::sqrt(42.0f);
         }
         default: throw std::runtime_error("Unsupported mod");
     }
@@ -137,6 +162,29 @@ void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationTy
                 out[4 * i + 1] = b1;
                 out[4 * i + 2] = b2;
                 out[4 * i + 3] = b3;
+            }
+            return;
+        }
+        case ModulationType::QAM64:
+        {
+            out.resize(in.size() * 3);
+            float sqrt42f = std::sqrt(42.0f);
+
+            for (size_t i = 0; i < in.size() / 2; ++i)
+            {
+                float real = in[2 * i] * sqrt42f;
+                float imag = in[2 * i + 1] * sqrt42f;
+
+                out[6 * i] = (real < 0.0f) ? 1.0f : 0.0f;
+                out[6 * i + 1] = (imag < 0.0f) ? 1.0f : 0.0f;
+
+                float abs_real = std::abs(real);
+                float abs_imag = std::abs(imag);
+                out[6 * i + 2] = (abs_real < 4.0f) ? 0.0f : 1.0f;
+                out[6 * i + 3] = (abs_imag < 4.0f) ? 0.0f : 1.0f;
+
+                out[6 * i + 4] = (std::abs(abs_real - 4.0f) < 2.0f) ? 0.0f : 1.0f;
+                out[6 * i + 5] = (std::abs(abs_imag - 4.0f) < 2.0f) ? 0.0f : 1.0f;
             }
             return;
         }
