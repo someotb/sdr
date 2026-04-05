@@ -53,6 +53,8 @@ struct sharedData
         std::atomic<bool> changed_quit = false;
         std::atomic<bool> changed_rx_gain = false;
         std::atomic<bool> changed_tx_gain = false;
+        bool rx_gain_mode = false;
+        std::atomic<bool> changed_rx_gain_mode = false;
         std::atomic<bool> changed_rx_freq = false;
         std::atomic<bool> changed_tx_freq = false;
         std::atomic<bool> changed_sample_rate = false;

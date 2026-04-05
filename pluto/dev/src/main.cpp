@@ -89,6 +89,14 @@ void run_backend(sharedData &sh_data)
             sh_data.flags.dsp = true;
         }
 
+        static auto last_gain_update = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+
+        if (now - last_gain_update > std::chrono::milliseconds(500)) {
+            sh_data.rx_gain = SoapySDRDevice_getGain(sdr.sdr, SOAPY_SDR_RX, 0);
+            last_gain_update = now;
+        }
+
         if (sh_data.flags.changed_rx_gain)
         {
             if (int err; (err = SoapySDRDevice_setGain(sdr.sdr, SOAPY_SDR_RX, 0, sh_data.rx_gain)) != 0)
@@ -138,6 +146,13 @@ void run_backend(sharedData &sh_data)
             if (int err; (err = SoapySDRDevice_setBandwidth(sdr.sdr, SOAPY_SDR_TX, 0, sh_data.tx_bandwidth)) != 0)
                 std::cout << "[ERROR] Set TX bandwidth | Error code: " << err << "\n";
             sh_data.flags.changed_tx_bandwidth = false;
+        }
+
+        if (sh_data.flags.changed_rx_gain_mode)
+        {
+            if (int err; (err = SoapySDRDevice_setGainMode(sdr.sdr, SOAPY_SDR_RX, 0, sh_data.flags.rx_gain_mode)) != 0)
+                std::cout << "[ERROR] Set RX gain mode | Error code: " << err << "\n";
+            sh_data.flags.changed_rx_gain_mode = false;
         }
     }
 }
@@ -556,7 +571,14 @@ void run_gui(sharedData &sh_data)
                 }
 
                 if (ImGui::DragFloat("RX Gain", &sh_data.rx_gain, 0.25f, 0.f, 73.f))
+                {
                     sh_data.flags.changed_rx_gain = true;
+                    sh_data.flags.rx_gain_mode = false;
+                    sh_data.flags.changed_rx_gain_mode = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Checkbox("AGC", &sh_data.flags.rx_gain_mode))
+                    sh_data.flags.changed_rx_gain_mode = true;
 
                 if (ImGui::DragFloat("TX Gain", &sh_data.tx_gain, 0.25f, 0.f, 89.f))
                     sh_data.flags.changed_tx_gain = true;
