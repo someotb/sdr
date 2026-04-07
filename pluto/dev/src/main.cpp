@@ -575,6 +575,34 @@ void run_gui(sharedData &sh_data)
                     ImGui::EndCombo();
                 }
 
+                if (ImGui::Button("RX Mode", ImVec2(ImGui::GetContentRegionAvail().x / 2, 0.0f)))
+                {
+                    sh_data.flags.get_zadoff_pos = !sh_data.flags.get_zadoff_pos;
+                    sh_data.flags.rx_gain_mode = !sh_data.flags.rx_gain_mode;
+                    sh_data.flags.changed_rx_gain_mode = true;
+                    sh_data.tx_gain = 0.0f;
+                    sh_data.flags.cfo_cor = !sh_data.flags.cfo_cor;
+                    sh_data.flags.equal = !sh_data.flags.equal;
+                    sh_data.flags.check_bits = !sh_data.flags.check_bits;
+                    sh_data.flags.debug = !sh_data.flags.debug;
+                }
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("TX Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
+                {
+                    sh_data.flags.changed_send = !sh_data.flags.changed_send;
+                    sh_data.flags.changed_pss_symbols = !sh_data.flags.changed_pss_symbols;
+                    sh_data.flags.get_zadoff_pos = !sh_data.flags.get_zadoff_pos;
+                    sh_data.flags.rx_gain_mode = !sh_data.flags.rx_gain_mode;
+                    sh_data.flags.changed_rx_gain_mode = true;
+                    sh_data.tx_gain = 89.0f;
+                    sh_data.flags.cfo_cor = !sh_data.flags.cfo_cor;
+                    sh_data.flags.equal = !sh_data.flags.equal;
+                    sh_data.flags.check_bits = !sh_data.flags.check_bits;
+                    sh_data.flags.debug = !sh_data.flags.debug;
+                }
+
                 if (ImGui::DragFloat("RX Gain", &sh_data.rx_gain, 0.25f, 0.f, 73.f))
                 {
                     sh_data.flags.changed_rx_gain = true;

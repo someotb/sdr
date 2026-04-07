@@ -558,8 +558,8 @@ void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, si
 
 void check_demapping(const std::vector<float> &in_signal, sharedData& sh_data)
 {
-    sh_data.err_cnt = 0;
     sh_data.bits.clear();
+    sh_data.bits.reserve(in_signal.size());
 
     int ofdm_symbol_len = sh_data.subcarrier + sh_data.cyclic_prefex;
     int right_samples = sh_data.rx_complex.size() - (sh_data.sync_pos + ofdm_symbol_len);
