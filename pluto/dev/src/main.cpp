@@ -167,14 +167,12 @@ void run_dsp(sharedData &sh_data)
         sh_data.frequency_axis[i] = (i - sh_data.mtu / 2.0) * sh_data.sample_rate / sh_data.mtu;
 
     int ofdm_symbol = sh_data.subcarrier + sh_data.cyclic_prefex;
-    std::vector<int> bits;
     std::vector<int16_t> zadoff_chu_seq((sh_data.subcarrier + sh_data.cyclic_prefex) * 2);
     std::vector<std::complex<float>> rx_complex_remove_pss;
     std::vector<std::complex<float>> rx_complex_cfo;
     std::vector<std::complex<float>> rx_complex_remove_cp;
     std::vector<std::complex<float>> rx_complex_fft;
     std::vector<std::complex<float>> rx_complex_eq;
-    std::vector<int> gen_bits;
 
     std::vector<float> signal_re(sh_data.mtu, 0);
     std::vector<float> signal_im(sh_data.mtu, 0);
@@ -260,10 +258,7 @@ void run_dsp(sharedData &sh_data)
             }
 
             if (sh_data.flags.check_bits)
-            {
-                get_bits_to_check(sh_data);
-                check_bits(sh_data.demaped_bits, sh_data);
-            }
+                check_demapping(sh_data.demaped_bits, sh_data);
 
             sh_data.rx_complex_fft_gui = sh_data.flags.equal ? rx_complex_eq : rx_complex_fft;
 

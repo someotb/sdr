@@ -21,6 +21,8 @@ int bits_per_symbol(ModulationType mod)
         case ModulationType::BPSK: return 1;
         case ModulationType::QPSK: return 2;
         case ModulationType::QAM16: return 4;
+        case ModulationType::QAM64: return 6;
+        case ModulationType::QAM128: return 7;
         default:
             throw std::runtime_error("[BPS] unsupported modulation type");
     }
@@ -120,7 +122,7 @@ std::complex<float> map_symbol_prbs(PRBS15 &gen, ModulationType mod)
             float real = (1.0f - 2.0f * b0) * (8.0f - (1.0f - 2.0f * b2) * (4.0f - (1.0f - 2.0f * b4) * (2.0f - (1.0f - 2.0f * b6))));
             float imag = (1.0f - 2.0f * b1) * (4.0f - (1.0f - 2.0f * b3) * (2.0f - (1.0f - 2.0f * b5)));
 
-            return std::complex<float>(real, imag) / std::sqrt(53.0f);
+                return std::complex<float>(real, imag) / std::sqrt(82.0f);
         }
 
         default: throw std::runtime_error("Unsupported mod");
@@ -378,12 +380,6 @@ void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &out_signa
     }
     else
     {
-        int left_rem_buf_cnt = int(sh_data.sync_pos / ofdm_symbol);
-        int left_start_idx = sh_data.sync_pos - left_rem_buf_cnt * ofdm_symbol;
-
-        for (int i = left_start_idx; i < sh_data.sync_pos; ++i)
-            out_signal.push_back(sh_data.rx_complex[i]);
-
         int right_start_idx = sh_data.sync_pos + ofdm_symbol;
 
         int rem_samples = sh_data.rx_complex.size() - right_start_idx;
@@ -392,6 +388,13 @@ void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &out_signa
 
         for (int i = right_start_idx; i < end_idx; ++i)
             out_signal.push_back(sh_data.rx_complex[i]);
+
+        int left_rem_buf_cnt = int(sh_data.sync_pos / ofdm_symbol);
+        int left_start_idx = sh_data.sync_pos - left_rem_buf_cnt * ofdm_symbol;
+
+        for (int i = left_start_idx; i < sh_data.sync_pos; ++i)
+            out_signal.push_back(sh_data.rx_complex[i]);
+
     }
 }
 
@@ -553,25 +556,37 @@ void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, si
     }
 }
 
-void get_bits_to_check(sharedData &sh_data)
-{
-    PRBS15 prbs_rx;
-
-    sh_data.bits.clear();
-    sh_data.bits.reserve(sh_data.demaped_bits.size());
-
-    for (size_t i = 0; i < sh_data.demaped_bits.size(); ++i)
-    {
-        sh_data.bits.push_back(prbs_rx.get_bit());
-    }
-}
-
-void check_bits(std::vector<float> &in_signal, sharedData &sh_data)
+void check_demapping(const std::vector<float> &in_signal, sharedData& sh_data)
 {
     sh_data.err_cnt = 0;
-    for (size_t i = 0; i < in_signal.size(); ++i)
+    sh_data.bits.clear();
+
+    int ofdm_symbol_len = sh_data.subcarrier + sh_data.cyclic_prefex;
+    int right_samples = sh_data.rx_complex.size() - (sh_data.sync_pos + ofdm_symbol_len);
+    int right_symbols = std::max(0, right_samples / ofdm_symbol_len);
+
+    if (right_symbols == 0)
+        return;
+
+    int bps = bits_per_symbol(sh_data.modul_type_TX);
+
+    PRBS15 ref_gen;
+    ref_gen.state = 0xACE1;
+
+    for (int s = 0; s < right_symbols; ++s)
     {
-        if (in_signal[i] != sh_data.bits[i])
-            sh_data.err_cnt++;
+        for (int k = 0; k < sh_data.subcarrier; ++k)
+        {
+            if (sh_data.is_zeros[k] || sh_data.is_pilot[k])
+                continue;
+
+            for (int b = 0; b < bps; ++b)
+                sh_data.bits.push_back((float)ref_gen.get_bit());
+        }
     }
+
+    size_t len = std::min(sh_data.bits.size(), in_signal.size());
+    for (size_t i = 0; i < len; ++i)
+        if (sh_data.bits[i] != in_signal[i])
+            sh_data.err_cnt++;
 }
