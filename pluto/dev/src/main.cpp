@@ -235,7 +235,7 @@ void run_dsp(sharedData &sh_data)
             {
                 split_to_float(sh_data.rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
                 zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(), sh_data.zadoff_corr_arr.data());
-                sh_data.sync_pos = zad_of_idx;
+                sh_data.sync_pos = zad_of_idx - 1;
             }
 
             remove_pss(sh_data, rx_complex_remove_pss);
@@ -344,6 +344,7 @@ void run_gui(sharedData &sh_data)
         {
             if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
+                ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 1.5f, ImPlot::GetColormapColor(0), 1.0f, ImPlot::GetColormapColor(0));
                 ImPlot::PlotScatter("I/Q",
                                     raw_data,
                                     raw_data + 1,
@@ -355,6 +356,7 @@ void run_gui(sharedData &sh_data)
 
         if (ImGui::Begin("Scatter FFT"))
         {
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 1.5f, ImPlot::GetColormapColor(0), 1.0f, ImPlot::GetColormapColor(0));
             if (ImPlot::BeginPlot("Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::PlotScatter("I/Q",
@@ -524,6 +526,9 @@ void run_gui(sharedData &sh_data)
                 case ModulationType::QAM64:
                     modulation_type = "Modulation: QAM64";
                     break;
+                case ModulationType::QAM128:
+                    modulation_type = "Modulation: QAM128";
+                    break;
                 }
 
                 ImGui::SetNextItemWidth(-FLT_MIN);
@@ -547,6 +552,11 @@ void run_gui(sharedData &sh_data)
                     if (ImGui::Selectable("QAM64", sh_data.modul_type_TX == ModulationType::QAM64))
                     {
                         sh_data.modul_type_TX = ModulationType::QAM64;
+                        sh_data.flags.changed_modulation_type = true;
+                    }
+                    if (ImGui::Selectable("QAM128", sh_data.modul_type_TX == ModulationType::QAM128))
+                    {
+                        sh_data.modul_type_TX = ModulationType::QAM128;
                         sh_data.flags.changed_modulation_type = true;
                     }
                     ImGui::EndCombo();
