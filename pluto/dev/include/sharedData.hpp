@@ -2,11 +2,11 @@
 
 #include "types.hpp"
 
+#include <atomic>
+#include <complex>
 #include <numeric>
 #include <string>
-#include <atomic>
 #include <vector>
-#include <complex>
 
 struct sharedData
 {
@@ -24,10 +24,7 @@ struct sharedData
     std::vector<float> zadoff_corr_arr;
     std::vector<float> milisecs;
     std::vector<float> cfo_offset;
-    std::vector<int> pilot_idxs = {
-        1, 8, 15, 22, 29, 35,
-        92, 99, 106, 113, 120, 127
-    };
+    std::vector<int> pilot_idxs = {1, 8, 15, 22, 29, 35, 92, 99, 106, 113, 120, 127};
     std::vector<int> zeros_idxs;
     std::vector<bool> is_pilot;
     std::vector<bool> is_zeros;

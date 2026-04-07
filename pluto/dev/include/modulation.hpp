@@ -1,19 +1,16 @@
 #pragma once
 
-#include "sharedData.hpp"
 #include "fftlib.hpp"
-#include "types.hpp"
 #include "prbs15.hpp"
+#include "sharedData.hpp"
+#include "types.hpp"
 
-#include <vector>
+#include <cmath>
 #include <complex>
 #include <cstdint>
-#include <cmath>
-
+#include <vector>
 
 int bits_per_symbol(ModulationType mod);
-
-std::complex<float> map_symbol(const std::vector<int> &bits, size_t &offset, ModulationType mod);
 
 void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationType mod);
 
@@ -25,7 +22,8 @@ void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_pr
 
 void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &shifted_magnitude, std::vector<float> &argument, FFT_Context &context);
 
-int zadoff_sync(const float *__restrict signal_re, const float *__restrict signal_im, size_t signal_len, const float *__restrict zc_re, const float *__restrict zc_im, size_t zc_len, float* __restrict out_corr);
+int zadoff_sync(const float *__restrict signal_re, const float *__restrict signal_im, size_t signal_len, const float *__restrict zc_re,
+                const float *__restrict zc_im, size_t zc_len, float *__restrict out_corr);
 
 void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &out_signal);
 
@@ -37,8 +35,8 @@ void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::comple
 
 void equalization(std::vector<std::complex<float>> &in_signal, const sharedData &sh_data, std::vector<std::complex<float>> &out_signal);
 
-void split_to_float(const std::complex<float>* __restrict src, float* __restrict dst_re, float* __restrict dst_im, size_t n);
+void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n);
 
 void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, size_t num_samples);
 
-void check_demapping(const std::vector<float> &in_signal, sharedData& sh_data);
+void check_demapping(const std::vector<float> &in_signal, sharedData &sh_data);

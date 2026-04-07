@@ -1,34 +1,34 @@
 #include "modulation.hpp"
+#include "sdr.hpp"
 #include "sharedData.hpp"
 #include "types.hpp"
-#include "sdr.hpp"
 
+#include "backends/imgui_impl_opengl3.h"
+#include "backends/imgui_impl_sdl2.h"
+#include "imgui.h"
+#include "implot.h"
+#include <GL/glew.h>
+#include <SDL2/SDL.h>
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Types.h>
+#include <atomic>
+#include <cmath>
+#include <complex.h>
 #include <complex>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <functional>
+#include <iostream>
+#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <complex.h>
-#include <math.h>
-#include <unistd.h>
 #include <string.h>
-#include <GL/glew.h>
-#include <SDL2/SDL.h>
 #include <thread>
-#include <atomic>
-#include <cmath>
-#include <iostream>
-#include "imgui.h"
-#include "implot.h"
-#include "backends/imgui_impl_opengl3.h"
-#include "backends/imgui_impl_sdl2.h"
+#include <unistd.h>
 
 constexpr long long TIMEOUT = 400000;
 constexpr long long TX_DELAY = 4000000;
@@ -92,7 +92,8 @@ void run_backend(sharedData &sh_data)
         static auto last_gain_update = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
 
-        if (now - last_gain_update > std::chrono::milliseconds(1000)) {
+        if (now - last_gain_update > std::chrono::milliseconds(1000))
+        {
             sh_data.rx_gain = SoapySDRDevice_getGain(sdr.sdr, SOAPY_SDR_RX, 0);
             last_gain_update = now;
         }
@@ -224,7 +225,8 @@ void run_dsp(sharedData &sh_data)
             if (sh_data.flags.get_zadoff_pos_loopback)
             {
                 split_to_float(sh_data.rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
-                zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(), sh_data.zadoff_corr_arr.data());
+                zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(),
+                                         sh_data.zadoff_corr_arr.data());
                 sh_data.sync_pos = zad_of_idx;
                 sh_data.flags.get_zadoff_pos_loopback = false;
             }
@@ -232,7 +234,8 @@ void run_dsp(sharedData &sh_data)
             if (sh_data.flags.get_zadoff_pos)
             {
                 split_to_float(sh_data.rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
-                zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(), sh_data.zadoff_corr_arr.data());
+                zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(),
+                                         sh_data.zadoff_corr_arr.data());
                 sh_data.sync_pos = zad_of_idx - 1;
             }
 
@@ -290,9 +293,8 @@ void run_gui(sharedData &sh_data)
     int cur_tx_bandwidth = 1;
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
-    SDL_Window *window = SDL_CreateWindow(
-        "GUI", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    SDL_Window *window =
+        SDL_CreateWindow("GUI", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_SetSwapInterval(0);
 
@@ -300,10 +302,7 @@ void run_gui(sharedData &sh_data)
     ImPlot::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
 
-    static const ImVec4 plot_colors[4] = {
-        ImVec4(0.26f, 0.65f, 0.98f, 1.00f),
-        ImVec4(1.00f, 0.50f, 0.20f, 1.00f)
-    };
+    static const ImVec4 plot_colors[4] = {ImVec4(0.26f, 0.65f, 0.98f, 1.00f), ImVec4(1.00f, 0.50f, 0.20f, 1.00f)};
 
     ImPlot::AddColormap("PlotPalete", plot_colors, 2);
 
@@ -340,10 +339,7 @@ void run_gui(sharedData &sh_data)
             if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
                 ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 1.5f, ImPlot::GetColormapColor(0), 1.0f, ImPlot::GetColormapColor(0));
-                ImPlot::PlotScatter("I/Q",
-                                    raw_data,
-                                    raw_data + 1,
-                                    sh_data.rx_complex.size(), 0, 0, sizeof(std::complex<float>));
+                ImPlot::PlotScatter("I/Q", raw_data, raw_data + 1, sh_data.rx_complex.size(), 0, 0, sizeof(std::complex<float>));
                 ImPlot::EndPlot();
             }
         }
@@ -354,10 +350,7 @@ void run_gui(sharedData &sh_data)
             ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 1.5f, ImPlot::GetColormapColor(0), 1.0f, ImPlot::GetColormapColor(0));
             if (ImPlot::BeginPlot("Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                ImPlot::PlotScatter("I/Q",
-                                    dsp_data,
-                                    dsp_data + 1,
-                                    sh_data.rx_complex_fft_gui.size(), 0, 0, sizeof(std::complex<float>));
+                ImPlot::PlotScatter("I/Q", dsp_data, dsp_data + 1, sh_data.rx_complex_fft_gui.size(), 0, 0, sizeof(std::complex<float>));
                 ImPlot::EndPlot();
             }
         }
@@ -622,13 +615,15 @@ void run_gui(sharedData &sh_data)
                 if (ImGui::InputFloat("TX Frequency", &sh_data.tx_frequency, 1e2, 1e3))
                     sh_data.flags.changed_tx_freq = true;
 
-                if (ImGui::SliderInt("RX Bandwidth", &cur_rx_bandwidth, 0, bandwidths.size() - 1, std::to_string(bandwidths[cur_rx_bandwidth]).c_str()))
+                if (ImGui::SliderInt("RX Bandwidth", &cur_rx_bandwidth, 0, bandwidths.size() - 1,
+                                     std::to_string(bandwidths[cur_rx_bandwidth]).c_str()))
                 {
                     sh_data.rx_bandwidth = bandwidths[cur_rx_bandwidth];
                     sh_data.flags.changed_rx_bandwidth = true;
                 }
 
-                if (ImGui::SliderInt("TX Bandwidth", &cur_tx_bandwidth, 0, bandwidths.size() - 1, std::to_string(bandwidths[cur_tx_bandwidth]).c_str()))
+                if (ImGui::SliderInt("TX Bandwidth", &cur_tx_bandwidth, 0, bandwidths.size() - 1,
+                                     std::to_string(bandwidths[cur_tx_bandwidth]).c_str()))
                 {
                     sh_data.tx_bandwidth = bandwidths[cur_tx_bandwidth];
                     sh_data.flags.changed_tx_bandwidth = true;

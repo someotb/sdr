@@ -4,14 +4,15 @@
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <cstdint>
-#include <vector>
 #include <iostream>
+#include <vector>
 
-class SDRDevice {
-public:
-    SoapySDRDevice* sdr;
-    SoapySDRStream* rxStream;
-    SoapySDRStream* txStream;
+class SDRDevice
+{
+  public:
+    SoapySDRDevice *sdr;
+    SoapySDRStream *rxStream;
+    SoapySDRStream *txStream;
     size_t rx_mtu;
     size_t tx_mtu;
     double sample_rate = 1.92e6;
@@ -23,7 +24,8 @@ public:
     std::vector<int16_t> rx_buffer;
     std::vector<int16_t> tx_buffer;
 
-    SDRDevice(const char* usb): sdr(nullptr), rxStream(nullptr), txStream(nullptr) {
+    SDRDevice(const char *usb) : sdr(nullptr), rxStream(nullptr), txStream(nullptr)
+    {
         SoapySDRKwargs args = {};
         SoapySDRKwargs_set(&args, "driver", "plutosdr");
         SoapySDRKwargs_set(&args, "uri", usb);
@@ -61,14 +63,18 @@ public:
         tx_buffer.resize(2 * tx_mtu);
     }
 
-    ~SDRDevice() {
+    ~SDRDevice()
+    {
         std::cout << "[INFO] SDRDevice destructor called\n";
-        if (sdr) {
-            if (rxStream) {
+        if (sdr)
+        {
+            if (rxStream)
+            {
                 SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);
                 SoapySDRDevice_closeStream(sdr, rxStream);
             }
-            if (txStream) {
+            if (txStream)
+            {
                 SoapySDRDevice_deactivateStream(sdr, txStream, 0, 0);
                 SoapySDRDevice_closeStream(sdr, txStream);
             }
