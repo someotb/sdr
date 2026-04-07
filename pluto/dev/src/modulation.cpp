@@ -111,6 +111,18 @@ std::complex<float> map_symbol_prbs(PRBS15 &gen, ModulationType mod)
             float imag = (1.0f - 2.0f * b1) * (4.0f - (1.0f - 2.0f * b3) * (2.0f - (1.0f - 2.0f * b5)));
             return std::complex<float>(real, imag) / std::sqrt(42.0f);
         }
+        case ModulationType::QAM128: {
+            int b0 = gen.get_bit(); int b1 = gen.get_bit();
+            int b2 = gen.get_bit(); int b3 = gen.get_bit();
+            int b4 = gen.get_bit(); int b5 = gen.get_bit();
+            int b6 = gen.get_bit();
+
+            float real = (1.0f - 2.0f * b0) * (8.0f - (1.0f - 2.0f * b2) * (4.0f - (1.0f - 2.0f * b4) * (2.0f - (1.0f - 2.0f * b6))));
+            float imag = (1.0f - 2.0f * b1) * (4.0f - (1.0f - 2.0f * b3) * (2.0f - (1.0f - 2.0f * b5)));
+
+            return std::complex<float>(real, imag) / std::sqrt(53.0f);
+        }
+
         default: throw std::runtime_error("Unsupported mod");
     }
 }
@@ -185,6 +197,30 @@ void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationTy
 
                 out[6 * i + 4] = (std::abs(abs_real - 4.0f) < 2.0f) ? 0.0f : 1.0f;
                 out[6 * i + 5] = (std::abs(abs_imag - 4.0f) < 2.0f) ? 0.0f : 1.0f;
+            }
+            return;
+        }
+        case ModulationType::QAM128:
+        {
+            out.resize(in.size() * 3.5);
+            float sqrt53f = std::sqrt(53.0f);
+
+            for (size_t i = 0; i < in.size() / 2; ++i)
+            {
+                float real = in[2 * i] * sqrt53f;
+                float imag = in[2 * i + 1] * sqrt53f;
+
+                out[7 * i] = (real < 0.0f) ? 1.0f : 0.0f;
+                float abs_real = std::abs(real);
+                out[7 * i + 2] = (abs_real < 8.0f) ? 0.0f : 1.0f;
+                float abs_r_8 = std::abs(abs_real - 8.0f);
+                out[7 * i + 4] = (abs_r_8 < 4.0f) ? 0.0f : 1.0f;
+                out[7 * i + 6] = (std::abs(abs_r_8 - 4.0f) < 2.0f) ? 0.0f : 1.0f;
+
+                out[7 * i + 1] = (imag < 0.0f) ? 1.0f : 0.0f;
+                float abs_imag = std::abs(imag);
+                out[7 * i + 3] = (abs_imag < 4.0f) ? 0.0f : 1.0f;
+                out[7 * i + 5] = (std::abs(abs_imag - 4.0f) < 2.0f) ? 0.0f : 1.0f;
             }
             return;
         }
@@ -442,9 +478,6 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
             int k1 = sh_data.pilot_idxs[p];
             int k2 = sh_data.pilot_idxs[p + 1];
 
-            if ((k2 - k1) > 20)
-                continue;
-
             std::complex<float> H1 = H[k1];
             std::complex<float> H2 = H[k2];
 
@@ -457,19 +490,35 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
             }
         }
 
+        for (int k = 0; k < sh_data.pilot_idxs.front(); ++k)
+            H[k] = H[sh_data.pilot_idxs.front()];
+
+        for (int k = sh_data.pilot_idxs.back() + 1; k < subcarrar; ++k)
+            H[k] = H[sh_data.pilot_idxs.back()];
+
         for (int k = 0; k < subcarrar; ++k)
-            equalized[k] = in_signal[i * subcarrar + k] / H[k];
+        {
+            if (sh_data.is_zeros[k] || std::abs(H[k]) < 1e-6f)
+                equalized[k] = {0, 0};
+            else
+                equalized[k] = in_signal[i * subcarrar + k] / H[k];
+        }
 
         float phase = 0;
-        for (int p_idx : sh_data.pilot_idxs) {
-            phase += std::arg(equalized[p_idx]);
+        int valid_pilots = 0;
+        for (int p_idx : sh_data.pilot_idxs)
+        {
+            if (std::abs(equalized[p_idx]) > 1e-6f)
+            {
+                phase += std::arg(equalized[p_idx]);
+                valid_pilots++;
+            }
         }
-        phase /= sh_data.pilot_idxs.size();
+        if (valid_pilots > 0) phase /= valid_pilots;
 
         std::complex<float> phase_corr = std::exp(std::complex<float>(0.0f, -phase));
-        for (int k = 0; k < subcarrar; ++k) {
+        for (int k = 0; k < subcarrar; ++k)
             equalized[k] *= phase_corr;
-        }
 
         for (size_t k = 0; k < equalized.size(); ++k)
         {
