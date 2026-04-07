@@ -92,7 +92,7 @@ void run_backend(sharedData &sh_data)
         static auto last_gain_update = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
 
-        if (now - last_gain_update > std::chrono::milliseconds(500)) {
+        if (now - last_gain_update > std::chrono::milliseconds(1000)) {
             sh_data.rx_gain = SoapySDRDevice_getGain(sdr.sdr, SOAPY_SDR_RX, 0);
             last_gain_update = now;
         }
