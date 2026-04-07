@@ -26,8 +26,8 @@ int bits_per_symbol(ModulationType mod)
         return 4;
     case ModulationType::QAM64:
         return 6;
-    case ModulationType::QAM128:
-        return 7;
+    case ModulationType::QAM256:
+        return 8;
     default:
         throw std::runtime_error("[BPS] unsupported modulation type");
     }
@@ -70,7 +70,7 @@ std::complex<float> map_symbol_prbs(PRBS15 &gen, ModulationType mod)
         float imag = (1.0f - 2.0f * b1) * (4.0f - (1.0f - 2.0f * b3) * (2.0f - (1.0f - 2.0f * b5)));
         return std::complex<float>(real, imag) / std::sqrt(42.0f);
     }
-    case ModulationType::QAM128:
+    case ModulationType::QAM256:
     {
         int b0 = gen.get_bit();
         int b1 = gen.get_bit();
@@ -79,11 +79,13 @@ std::complex<float> map_symbol_prbs(PRBS15 &gen, ModulationType mod)
         int b4 = gen.get_bit();
         int b5 = gen.get_bit();
         int b6 = gen.get_bit();
+        int b7 = gen.get_bit();
 
         float real = (1.0f - 2.0f * b0) * (8.0f - (1.0f - 2.0f * b2) * (4.0f - (1.0f - 2.0f * b4) * (2.0f - (1.0f - 2.0f * b6))));
-        float imag = (1.0f - 2.0f * b1) * (4.0f - (1.0f - 2.0f * b3) * (2.0f - (1.0f - 2.0f * b5)));
 
-        return std::complex<float>(real, imag) / std::sqrt(82.0f);
+        float imag = (1.0f - 2.0f * b1) * (8.0f - (1.0f - 2.0f * b3) * (4.0f - (1.0f - 2.0f * b5) * (2.0f - (1.0f - 2.0f * b7))));
+
+        return std::complex<float>(real, imag) / std::sqrt(170.0f);
     }
 
     default:
@@ -163,27 +165,37 @@ void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationTy
         }
         return;
     }
-    case ModulationType::QAM128:
+    case ModulationType::QAM256:
     {
-        out.resize(in.size() * 3.5);
-        float sqrt53f = std::sqrt(53.0f);
+        out.resize(in.size() * 4);
+        float sqrt170f = std::sqrt(170.0f);
 
         for (size_t i = 0; i < in.size() / 2; ++i)
         {
-            float real = in[2 * i] * sqrt53f;
-            float imag = in[2 * i + 1] * sqrt53f;
+            float real = in[2 * i] * sqrt170f;
+            float imag = in[2 * i + 1] * sqrt170f;
 
-            out[7 * i] = (real < 0.0f) ? 1.0f : 0.0f;
-            float abs_real = std::abs(real);
-            out[7 * i + 2] = (abs_real < 8.0f) ? 0.0f : 1.0f;
-            float abs_r_8 = std::abs(abs_real - 8.0f);
-            out[7 * i + 4] = (abs_r_8 < 4.0f) ? 0.0f : 1.0f;
-            out[7 * i + 6] = (std::abs(abs_r_8 - 4.0f) < 2.0f) ? 0.0f : 1.0f;
+            out[8 * i + 0] = (real < 0.0f) ? 1.0f : 0.0f;
+            float abs_r = std::abs(real);
 
-            out[7 * i + 1] = (imag < 0.0f) ? 1.0f : 0.0f;
-            float abs_imag = std::abs(imag);
-            out[7 * i + 3] = (abs_imag < 4.0f) ? 0.0f : 1.0f;
-            out[7 * i + 5] = (std::abs(abs_imag - 4.0f) < 2.0f) ? 0.0f : 1.0f;
+            out[8 * i + 2] = (abs_r < 8.0f) ? 0.0f : 1.0f;
+            float level_r_2 = std::abs(abs_r - 8.0f);
+
+            out[8 * i + 4] = (level_r_2 < 4.0f) ? 0.0f : 1.0f;
+            float level_r_3 = std::abs(level_r_2 - 4.0f);
+
+            out[8 * i + 6] = (level_r_3 < 2.0f) ? 0.0f : 1.0f;
+
+            out[8 * i + 1] = (imag < 0.0f) ? 1.0f : 0.0f;
+            float abs_q = std::abs(imag);
+
+            out[8 * i + 3] = (abs_q < 8.0f) ? 0.0f : 1.0f;
+            float level_q_2 = std::abs(abs_q - 8.0f);
+
+            out[8 * i + 5] = (level_q_2 < 4.0f) ? 0.0f : 1.0f;
+            float level_q_3 = std::abs(level_q_2 - 4.0f);
+
+            out[8 * i + 7] = (level_q_3 < 2.0f) ? 0.0f : 1.0f;
         }
         return;
     }
@@ -520,6 +532,11 @@ void check_demapping(const std::vector<float> &in_signal, sharedData &sh_data)
 {
     sh_data.bits.clear();
     sh_data.bits.reserve(in_signal.size());
+
+    sh_data.err_cnt = 0;
+
+    if (sh_data.sync_pos < 0)
+        return;
 
     int ofdm_symbol_len = sh_data.subcarrier + sh_data.cyclic_prefex;
     int right_samples = sh_data.rx_complex.size() - (sh_data.sync_pos + ofdm_symbol_len);

@@ -6,5 +6,5 @@ enum class ModulationType
     QPSK,
     QAM16,
     QAM64,
-    QAM128
+    QAM256
 };

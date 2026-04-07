@@ -236,6 +236,8 @@ void run_dsp(sharedData &sh_data)
                 split_to_float(sh_data.rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
                 zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(),
                                          sh_data.zadoff_corr_arr.data());
+                if (zad_of_idx > 1920)
+                    zad_of_idx = 1920;
                 sh_data.sync_pos = zad_of_idx - 1;
             }
 
@@ -514,8 +516,8 @@ void run_gui(sharedData &sh_data)
                 case ModulationType::QAM64:
                     modulation_type = "Modulation: QAM64";
                     break;
-                case ModulationType::QAM128:
-                    modulation_type = "Modulation: QAM128";
+                case ModulationType::QAM256:
+                    modulation_type = "Modulation: QAM256";
                     break;
                 }
 
@@ -542,9 +544,9 @@ void run_gui(sharedData &sh_data)
                         sh_data.modul_type_TX = ModulationType::QAM64;
                         sh_data.flags.changed_modulation_type = true;
                     }
-                    if (ImGui::Selectable("QAM128", sh_data.modul_type_TX == ModulationType::QAM128))
+                    if (ImGui::Selectable("QAM256", sh_data.modul_type_TX == ModulationType::QAM256))
                     {
-                        sh_data.modul_type_TX = ModulationType::QAM128;
+                        sh_data.modul_type_TX = ModulationType::QAM256;
                         sh_data.flags.changed_modulation_type = true;
                     }
                     ImGui::EndCombo();
