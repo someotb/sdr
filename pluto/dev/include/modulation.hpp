@@ -12,11 +12,17 @@
 
 int bits_per_symbol(ModulationType mod);
 
+std::complex<float> map_symbol_prbs(PRBS15 &gen, ModulationType mod);
+
+std::complex<float> map_symbol(std::vector<uint8_t> &in, ModulationType mod, int &offset);
+
 void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationType mod);
 
 void build_pss_zadoff_chu(FFT_Context &context, sharedData &sh_data);
 
-void build_ofdm_symbol(PRBS15 &gen, FFT_Context &context, const sharedData &sh_data);
+void build_ofdm_symbol_prbs(PRBS15 &gen, FFT_Context &context, const sharedData &sh_data);
+
+void build_ofdm_symbol(std::vector<uint8_t> &in, FFT_Context &context, const sharedData &sh_data, int &offset);
 
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start);
 
@@ -40,3 +46,7 @@ void split_to_float(const std::complex<float> *__restrict src, float *__restrict
 void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, size_t num_samples);
 
 void check_demapping(const std::vector<float> &in_signal, sharedData &sh_data);
+
+std::vector<uint8_t> str_to_bits(const std::string &in);
+
+std::string bits_to_str(const std::vector<float> &bits);

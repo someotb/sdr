@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <fftw3.h>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 int bits_per_symbol(ModulationType mod)
@@ -80,6 +81,69 @@ std::complex<float> map_symbol_prbs(PRBS15 &gen, ModulationType mod)
         int b5 = gen.get_bit();
         int b6 = gen.get_bit();
         int b7 = gen.get_bit();
+
+        float real = (1.0f - 2.0f * b0) * (8.0f - (1.0f - 2.0f * b2) * (4.0f - (1.0f - 2.0f * b4) * (2.0f - (1.0f - 2.0f * b6))));
+
+        float imag = (1.0f - 2.0f * b1) * (8.0f - (1.0f - 2.0f * b3) * (4.0f - (1.0f - 2.0f * b5) * (2.0f - (1.0f - 2.0f * b7))));
+
+        return std::complex<float>(real, imag) / std::sqrt(170.0f);
+    }
+
+    default:
+        throw std::runtime_error("Unsupported mod");
+    }
+}
+
+std::complex<float> map_symbol(std::vector<uint8_t> &in, ModulationType mod, int &offset)
+{
+    if ((size_t)offset > in.size() - 8)
+        return {0.0f, 0.0f};
+
+    switch (mod)
+    {
+    case ModulationType::BPSK:
+    {
+        float v = 1.0f - 2.0f * in[offset]; offset++;
+        return std::complex<float>(v, v) / std::sqrt(2.0f);
+    }
+    case ModulationType::QPSK:
+    {
+        float real = 1.0f - 2.0f * in[offset]; offset++;
+        float imag = 1.0f - 2.0f * in[offset]; offset++;
+        return std::complex<float>(real, imag) / std::sqrt(2.0f);
+    }
+    case ModulationType::QAM16:
+    {
+        int b0 = in[offset]; offset++;
+        int b1 = in[offset]; offset++;
+        int b2 = in[offset]; offset++;
+        int b3 = in[offset]; offset++;
+        float real = (1.0f - 2.0f * b0) * (2.0f - (1.0f - 2.0f * b2));
+        float imag = (1.0f - 2.0f * b1) * (2.0f - (1.0f - 2.0f * b3));
+        return std::complex<float>(real, imag) / std::sqrt(10.0f);
+    }
+    case ModulationType::QAM64:
+    {
+        int b0 = in[offset]; offset++;
+        int b1 = in[offset]; offset++;
+        int b2 = in[offset]; offset++;
+        int b3 = in[offset]; offset++;
+        int b4 = in[offset]; offset++;
+        int b5 = in[offset]; offset++;
+        float real = (1.0f - 2.0f * b0) * (4.0f - (1.0f - 2.0f * b2) * (2.0f - (1.0f - 2.0f * b4)));
+        float imag = (1.0f - 2.0f * b1) * (4.0f - (1.0f - 2.0f * b3) * (2.0f - (1.0f - 2.0f * b5)));
+        return std::complex<float>(real, imag) / std::sqrt(42.0f);
+    }
+    case ModulationType::QAM256:
+    {
+        int b0 = in[offset]; offset++;
+        int b1 = in[offset]; offset++;
+        int b2 = in[offset]; offset++;
+        int b3 = in[offset]; offset++;
+        int b4 = in[offset]; offset++;
+        int b5 = in[offset]; offset++;
+        int b6 = in[offset]; offset++;
+        int b7 = in[offset]; offset++;
 
         float real = (1.0f - 2.0f * b0) * (8.0f - (1.0f - 2.0f * b2) * (4.0f - (1.0f - 2.0f * b4) * (2.0f - (1.0f - 2.0f * b6))));
 
@@ -229,7 +293,7 @@ void build_pss_zadoff_chu(FFT_Context &context, sharedData &sh_data)
     ifft(context);
 }
 
-void build_ofdm_symbol(PRBS15 &gen, FFT_Context &context, const sharedData &sh_data)
+void build_ofdm_symbol_prbs(PRBS15 &gen, FFT_Context &context, const sharedData &sh_data)
 {
     for (int k = 0; k < context.N; ++k)
     {
@@ -246,6 +310,31 @@ void build_ofdm_symbol(PRBS15 &gen, FFT_Context &context, const sharedData &sh_d
         else
         {
             auto s = map_symbol_prbs(gen, sh_data.modul_type_TX);
+            context.in[k][0] = s.real();
+            context.in[k][1] = s.imag();
+        }
+    }
+
+    ifft(context);
+}
+
+void build_ofdm_symbol(std::vector<uint8_t> &in, FFT_Context &context, const sharedData &sh_data, int &offset)
+{
+    for (int k = 0; k < context.N; ++k)
+    {
+        if (sh_data.is_zeros[k])
+        {
+            context.in[k][0] = 0;
+            context.in[k][1] = 0;
+        }
+        else if (sh_data.is_pilot[k])
+        {
+            context.in[k][0] = 1.0;
+            context.in[k][1] = 0.0;
+        }
+        else
+        {
+            auto s = map_symbol(in, sh_data.modul_type_TX, offset);
             context.in[k][0] = s.real();
             context.in[k][1] = s.imag();
         }
@@ -354,7 +443,6 @@ void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &out_signa
     else
     {
         int right_start_idx = sh_data.sync_pos + ofdm_symbol;
-
         int rem_samples = sh_data.rx_complex.size() - right_start_idx;
         int cnt_samples = rem_samples / ofdm_symbol;
         int end_idx = right_start_idx + (cnt_samples * ofdm_symbol);
@@ -566,4 +654,30 @@ void check_demapping(const std::vector<float> &in_signal, sharedData &sh_data)
     for (size_t i = 0; i < len; ++i)
         if (sh_data.bits[i] != in_signal[i])
             sh_data.err_cnt++;
+}
+
+std::vector<uint8_t> str_to_bits(const std::string &in)
+{
+    std::vector<uint8_t> bits;
+    bits.reserve(in.size() * 8);
+
+    for (uint8_t c : in)
+        for (int i = 7; i >= 0; --i)
+            bits.push_back((c >> i) & 1);
+
+    return bits;
+}
+
+std::string bits_to_str(const std::vector<float> &bits)
+{
+    std::string message;
+    for (size_t i = 0; i + 7 < bits.size(); i += 8)
+    {
+        uint8_t c = 0;
+        for (int j = 0; j < 8; ++j)
+            if ((uint8_t)bits[i + j])
+                c |= (1 << (7 - j));
+        message += (char)c;
+    }
+    return message;
 }

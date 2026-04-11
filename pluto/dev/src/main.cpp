@@ -9,6 +9,7 @@
 #include "implot.h"
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
+#include <SDL_video.h>
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Types.h>
@@ -17,6 +18,7 @@
 #include <complex.h>
 #include <complex>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -29,6 +31,7 @@
 #include <string.h>
 #include <thread>
 #include <unistd.h>
+#include <vector>
 
 constexpr long long TIMEOUT = 400000;
 constexpr long long TX_DELAY = 4000000;
@@ -62,31 +65,63 @@ void run_backend(sharedData &sh_data)
 
         if (sh_data.flags.read)
         {
-            void *tx_buffs[] = {sh_data.tx_buffer.data()};
-            void *rx_buffs[] = {sdr.rx_buffer.data()};
-
-            int flags = 0;
-            long long timeNs = 0;
-
-            int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
-            if (sr != sh_data.mtu)
-                std::cout << "[ERROR] Read stream | Error code: " << sr << "\n";
-
-            long long tx_time = timeNs + TX_DELAY;
-            flags = SOAPY_SDR_HAS_TIME;
-
-            if (sh_data.flags.changed_send)
+            if (sh_data.flags.constant_mode && !sh_data.flags.one_time_mode)
             {
-                int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
-                if (st != sh_data.mtu)
-                    std::cout << "[ERROR] Write stream | Error code: " << st << "\n";
+                void *tx_buffs[] = {sh_data.tx_buffer.data()};
+                void *rx_buffs[] = {sdr.rx_buffer.data()};
+
+                int flags = 0;
+                long long timeNs = 0;
+
+                int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
+                if (sr != sh_data.mtu)
+                    std::cout << "[ERROR] Read stream | Error code: " << sr << "\n";
+
+                long long tx_time = timeNs + TX_DELAY;
+                flags = SOAPY_SDR_HAS_TIME;
+
+                if (sh_data.flags.changed_send)
+                {
+                    int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
+                    if (st != sh_data.mtu)
+                        std::cout << "[ERROR] Write stream | Error code: " << st << "\n";
+                }
+
+                for (int i = 0; i < sh_data.mtu; ++i)
+                    sh_data.rx_complex[i] = std::complex<float>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
+
+                sh_data.flags.read = false;
+                sh_data.flags.dsp = true;
             }
 
-            for (int i = 0; i < sh_data.mtu; ++i)
-                sh_data.rx_complex[i] = std::complex<float>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
+            if (sh_data.flags.one_time_mode && !sh_data.flags.constant_mode)
+            {
+                void *tx_buffs[] = {sh_data.tx_buffer_one_time.data()};
+                void *rx_buffs[] = {sdr.rx_buffer.data()};
 
-            sh_data.flags.read = false;
-            sh_data.flags.dsp = true;
+                int flags = 0;
+                long long timeNs = 0;
+
+                int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
+                if (sr != sh_data.mtu)
+                    std::cout << "[ERROR] Read stream | Error code: " << sr << "\n";
+
+                long long tx_time = timeNs + TX_DELAY;
+                flags = SOAPY_SDR_HAS_TIME;
+
+                if (sh_data.flags.changed_send)
+                {
+                    int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
+                    if (st != sh_data.mtu)
+                        std::cout << "[ERROR] Write stream | Error code: " << st << "\n";
+                }
+
+                for (int i = 0; i < sh_data.mtu; ++i)
+                    sh_data.rx_complex[i] = std::complex<float>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
+
+                sh_data.flags.read = false;
+                sh_data.flags.dsp = true;
+            }
         }
 
         static auto last_gain_update = std::chrono::steady_clock::now();
@@ -198,23 +233,54 @@ void run_dsp(sharedData &sh_data)
 
         if (sh_data.flags.form)
         {
-            int start_idx = 0;
-            prbs15.state = 0xACE1;
-
-            if (sh_data.flags.changed_pss_symbols)
+            if (sh_data.flags.constant_mode && !sh_data.flags.one_time_mode)
             {
-                append_symbol(zad_off_chu_context, sh_data.tx_buffer, sh_data.cyclic_prefex, 0);
-                start_idx = 2 * ofdm_symbol;
+                int start_idx = 0;
+                prbs15.state = 0xACE1;
+
+                if (sh_data.flags.changed_pss_symbols)
+                {
+                    append_symbol(zad_off_chu_context, sh_data.tx_buffer, sh_data.cyclic_prefex, 0);
+                    start_idx = 2 * ofdm_symbol;
+                }
+
+                for (int start = start_idx; start <= sh_data.buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
+                {
+                    build_ofdm_symbol_prbs(prbs15, context, sh_data);
+                    append_symbol(context, sh_data.tx_buffer, sh_data.cyclic_prefex, start);
+                }
+
+                sh_data.flags.form = false;
+                sh_data.flags.read = true;
             }
 
-            for (int start = start_idx; start <= sh_data.buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
+            if (sh_data.flags.one_time_mode && !sh_data.flags.constant_mode)
             {
-                build_ofdm_symbol(prbs15, context, sh_data);
-                append_symbol(context, sh_data.tx_buffer, sh_data.cyclic_prefex, start);
-            }
+                int start_idx = 0;
+                int offset = 0;
+                std::vector<uint8_t> message_bits;
 
-            sh_data.flags.form = false;
-            sh_data.flags.read = true;
+                if (!sh_data.message.empty())
+                    message_bits = str_to_bits(sh_data.message);
+
+                while (message_bits.size() < sh_data.tx_buffer_one_time.size())
+                    message_bits.push_back(0);
+
+                if (sh_data.flags.changed_pss_symbols)
+                {
+                    append_symbol(zad_off_chu_context, sh_data.tx_buffer_one_time, sh_data.cyclic_prefex, 0);
+                    start_idx = 2 * ofdm_symbol;
+                }
+
+                for (int start = start_idx; start <= sh_data.buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
+                {
+                    build_ofdm_symbol(message_bits, context, sh_data, offset);
+                    append_symbol(context, sh_data.tx_buffer_one_time, sh_data.cyclic_prefex, start);
+                }
+
+                sh_data.flags.form = false;
+                sh_data.flags.read = true;
+            }
         }
         if (sh_data.flags.dsp)
         {
@@ -238,7 +304,7 @@ void run_dsp(sharedData &sh_data)
                                          sh_data.zadoff_corr_arr.data());
                 if (zad_of_idx > 1920)
                     zad_of_idx = 1920;
-                sh_data.sync_pos = zad_of_idx - 1;
+                sh_data.sync_pos = zad_of_idx - 2;
             }
 
             remove_pss(sh_data, rx_complex_remove_pss);
@@ -261,6 +327,9 @@ void run_dsp(sharedData &sh_data)
                 sh_data.demaped_bits.resize(signal_eq_float.size());
                 demap_symbols(signal_eq_float, sh_data.demaped_bits, sh_data.modul_type_TX);
             }
+
+            if (sh_data.flags.one_time_mode)
+                sh_data.dec_message = bits_to_str(sh_data.demaped_bits);
 
             if (sh_data.flags.check_bits)
                 check_demapping(sh_data.demaped_bits, sh_data);
@@ -402,17 +471,20 @@ void run_gui(sharedData &sh_data)
 
         if (sh_data.flags.debug)
         {
-            const float *debug_latency = reinterpret_cast<const float *>(sh_data.milisecs.data());
-            const float *zadoff_chu = reinterpret_cast<const float *>(sh_data.zadoff_corr_arr.data());
-            const float *cfo_cor = reinterpret_cast<const float *>(sh_data.cfo_offset.data());
-            const float *dem_bits = reinterpret_cast<const float *>(sh_data.demaped_bits.data());
-
             if (ImGui::Begin("Latency"))
             {
                 if (ImPlot::BeginPlot("Latency", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    ImPlot::PlotLine("Latency", debug_latency, sh_data.milisecs.size());
-                    ImPlot::EndPlot();
+                    if (!sh_data.milisecs.empty())
+                    {
+                        ImPlot::PlotLine("Latency", sh_data.milisecs.data(), sh_data.milisecs.size());
+                        ImPlot::EndPlot();
+                    }
+                    else
+                    {
+                        ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                        ImPlot::EndPlot();
+                    }
                 }
             }
             ImGui::End();
@@ -421,8 +493,16 @@ void run_gui(sharedData &sh_data)
             {
                 if (ImPlot::BeginPlot("Zadoff-Chu Correlation Array", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    ImPlot::PlotLine("Zadoff-Chu", zadoff_chu, sh_data.zadoff_corr_arr.size());
-                    ImPlot::EndPlot();
+                    if (!sh_data.zadoff_corr_arr.empty())
+                    {
+                        ImPlot::PlotLine("Zadoff-Chu", sh_data.zadoff_corr_arr.data(), sh_data.zadoff_corr_arr.size());
+                        ImPlot::EndPlot();
+                    }
+                    else
+                    {
+                        ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                        ImPlot::EndPlot();
+                    }
                 }
             }
             ImGui::End();
@@ -431,26 +511,69 @@ void run_gui(sharedData &sh_data)
             {
                 if (ImPlot::BeginPlot("CFO Correction Array", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    ImPlot::PlotLine("CFO", cfo_cor, sh_data.cfo_offset.size());
-                    ImPlot::EndPlot();
+                    if (!sh_data.cfo_offset.empty())
+                    {
+                        ImPlot::PlotLine("CFO", sh_data.cfo_offset.data(), sh_data.cfo_offset.size());
+                        ImPlot::EndPlot();
+                    }
+                    else
+                    {
+                        ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                        ImPlot::EndPlot();
+                    }
                 }
             }
             ImGui::End();
 
             if (ImGui::Begin("Demapped Bits"))
             {
-                if (ImPlot::BeginPlot("Demapped Bits", ImVec2(ImGui::GetContentRegionAvail())))
+                if (sh_data.flags.constant_mode)
                 {
-                    ImPlot::PlotLine("RX", dem_bits, sh_data.demaped_bits.size());
-                    ImPlot::PlotLine("TX", sh_data.bits.data(), sh_data.bits.size());
-                    ImPlot::EndPlot();
+                    ImGui::Text("Error Counter: %d", sh_data.err_cnt);
+                    if (ImPlot::BeginPlot("Demapped Bits vs Sended", ImVec2(ImGui::GetContentRegionAvail())))
+                    {
+                        if (!sh_data.demaped_bits.empty())
+                        {
+                            ImPlot::PlotLine("RX", sh_data.demaped_bits.data(), sh_data.demaped_bits.size());
+                            ImPlot::PlotLine("TX", sh_data.bits.data(), sh_data.bits.size());
+                            ImPlot::EndPlot();
+                        }
+                        else
+                        {
+                            ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                            ImPlot::EndPlot();
+                        }
+                    }
+                }
+
+                if (sh_data.flags.one_time_mode)
+                {
+                    if (ImPlot::BeginPlot("Demapped Bits", ImVec2(ImGui::GetContentRegionAvail())))
+                    {
+                        if (!sh_data.demaped_bits.empty())
+                        {
+                            ImPlot::PlotLine("RX", sh_data.demaped_bits.data(), sh_data.demaped_bits.size());
+                            ImPlot::EndPlot();
+                        }
+                        else
+                        {
+                            ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                            ImPlot::EndPlot();
+                        }
+                    }
                 }
             }
             ImGui::End();
 
-            if (ImGui::Begin("Error Counter"))
-                ImGui::Text("Error Counter: %d", sh_data.err_cnt);
-            ImGui::End();
+            if (sh_data.flags.one_time_mode)
+            {
+                if (ImGui::Begin("Decoded Text"))
+                {
+                    ImGui::Text("Decoded text:");
+                    ImGui::TextWrapped("%s", sh_data.dec_message.c_str());
+                }
+                ImGui::End();
+            }
         }
         ImPlot::PopColormap();
 
@@ -634,13 +757,43 @@ void run_gui(sharedData &sh_data)
                 if (ImGui::InputFloat("Sample Rate", &sh_data.sample_rate, 1e5, 1e6))
                     sh_data.flags.changed_sample_rate = true;
 
+                if (ImGui::Button("Open Message Editor", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
+                    sh_data.flags.show_input_window = true;
+
+                if (sh_data.flags.show_input_window)
+                {
+                    ImGui::Begin("Input Message", &sh_data.flags.show_input_window);
+
+                    if (ImGui::InputText("Text", sh_data.input_buffer, 256))
+                        sh_data.message = sh_data.input_buffer;
+
+                    if (ImGui::Button("Close"))
+                        sh_data.flags.show_input_window = false;
+
+                    ImGui::End();
+                }
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("Debug"))
             {
-                if (ImGui::Button("Debug Mode"))
+                if (ImGui::MenuItem("Debug Mode", nullptr, sh_data.flags.debug))
                     sh_data.flags.debug = !sh_data.flags.debug;
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Send Mode"))
+            {
+                if (ImGui::MenuItem("Constant Mode", nullptr, sh_data.flags.constant_mode))
+                {
+                    sh_data.flags.constant_mode = true;
+                    sh_data.flags.one_time_mode = false;
+                }
+                if (ImGui::MenuItem("One-Time Mode", nullptr, sh_data.flags.one_time_mode))
+                {
+                    sh_data.flags.one_time_mode = true;
+                    sh_data.flags.constant_mode = false;
+                }
                 ImGui::EndMenu();
             }
 

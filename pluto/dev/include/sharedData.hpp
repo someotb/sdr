@@ -16,6 +16,7 @@ struct sharedData
     std::vector<std::complex<float>> rx_complex;
     std::vector<std::complex<float>> rx_complex_fft_gui;
     std::vector<int16_t> tx_buffer;
+    std::vector<int16_t> tx_buffer_one_time;
     std::vector<float> demaped_bits;
     std::vector<float> bits;
     std::vector<float> shifted_magnitude;
@@ -28,6 +29,8 @@ struct sharedData
     std::vector<int> zeros_idxs;
     std::vector<bool> is_pilot;
     std::vector<bool> is_zeros;
+    std::string message = "Hello World!";
+    std::string dec_message = "Hello World!";
 
     float rx_gain = 20.f;
     float tx_gain = 80.f;
@@ -43,9 +46,13 @@ struct sharedData
     int buffer = 3840;
     int zadoff_chu_u = 3;
     int err_cnt = 0;
+    char input_buffer[256] = "";
+
 
     struct flags
     {
+        std::atomic<bool> constant_mode = false;
+        std::atomic<bool> one_time_mode = false;
         std::atomic<bool> form = true;
         std::atomic<bool> read = false;
         std::atomic<bool> dsp = false;
@@ -54,6 +61,7 @@ struct sharedData
         std::atomic<bool> changed_rx_gain = false;
         std::atomic<bool> changed_tx_gain = false;
         bool rx_gain_mode = false;
+        bool show_input_window = false;
         std::atomic<bool> changed_rx_gain_mode = false;
         std::atomic<bool> changed_rx_freq = false;
         std::atomic<bool> changed_tx_freq = false;
@@ -86,6 +94,7 @@ struct sharedData
 
         is_zeros[0] = true;
 
+        tx_buffer_one_time.resize(rx_mtu * 2, 0);
         tx_buffer.resize(rx_mtu * 2, 0);
         rx_complex.resize(rx_mtu, 0);
         zadoff_corr_arr.resize(rx_mtu, 0);
