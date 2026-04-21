@@ -5,7 +5,6 @@
 #include "types.hpp"
 
 #include <cmath>
-#include <complex.h>
 #include <complex>
 #include <cstddef>
 #include <cstdint>
@@ -476,7 +475,7 @@ void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData &sh_
             corr += conj(in_signal[i + start]) * in_signal[i + start + subcarrar];
 
         float eps = arg(corr) / (2.0f * M_PIf);
-        float delta_f = eps * sample_rate / subcarrar;
+        float delta_f = eps * sample_rate / subcarrar; // На сколько символ отклоняется от эталона по фазе в Гц
         float phase_step = -2 * M_PIf * delta_f / sample_rate;
 
         for (int i = 0; i < ofdm_symbol; ++i)
@@ -543,13 +542,24 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
             std::complex<float> H1 = H[k1];
             std::complex<float> H2 = H[k2];
 
+            float phi1 = std::arg(H1);
+            float phi2 = std::arg(H2);
+
+            float delta_phi = phi2 - phi1;
+
+            if (delta_phi > M_PIf)
+                delta_phi -= 2 * M_PI;
+
+            if (delta_phi < -M_PIf)
+                delta_phi += 2 * M_PI;
+
             for (int k = k1 + 1; k < k2; ++k)
             {
                 if (sh_data.is_zeros[k])
                     continue;
 
                 float alpha = float(k - k1) / float(k2 - k1);
-                H[k] = H1 + alpha * (H2 - H1);
+                H[k] = std::polar(std::abs(H1) + alpha * (std::abs(H2) - std::abs(H1)), phi1 + alpha * delta_phi);
             }
         }
 
@@ -566,23 +576,6 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
             else
                 equalized[k] = in_signal[i * subcarrar + k] / H[k];
         }
-
-        float phase = 0;
-        int valid_pilots = 0;
-        for (int p_idx : sh_data.pilot_idxs)
-        {
-            if (std::abs(equalized[p_idx]) > 1e-6f)
-            {
-                phase += std::arg(equalized[p_idx]);
-                valid_pilots++;
-            }
-        }
-        if (valid_pilots > 0)
-            phase /= valid_pilots;
-
-        std::complex<float> phase_corr = std::exp(std::complex<float>(0.0f, -phase));
-        for (int k = 0; k < subcarrar; ++k)
-            equalized[k] *= phase_corr;
 
         for (size_t k = 0; k < equalized.size(); ++k)
         {

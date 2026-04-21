@@ -304,7 +304,7 @@ void run_dsp(sharedData &sh_data)
                                          sh_data.zadoff_corr_arr.data());
                 if (zad_of_idx > 1920)
                     zad_of_idx = 1920;
-                sh_data.sync_pos = zad_of_idx - 2;
+                sh_data.sync_pos = zad_of_idx - sh_data.sync_offset;
             }
 
             remove_pss(sh_data, rx_complex_remove_pss);
@@ -615,6 +615,7 @@ void run_gui(sharedData &sh_data)
                 if (ImGui::Button(zadoff_chu, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data.flags.get_zadoff_pos = !sh_data.flags.get_zadoff_pos;
                 ImGui::InputInt("Sync Pos", &sh_data.sync_pos, 1, 1e1);
+                ImGui::InputInt("Sync Offset", &sh_data.sync_offset, 1, 1e1);
                 ImGui::InputInt("U Value ", &sh_data.zadoff_chu_u, 1, 10);
 
                 ImGui::SeparatorText("DSP Module");

@@ -25,7 +25,7 @@ struct sharedData
     std::vector<float> zadoff_corr_arr;
     std::vector<float> milisecs;
     std::vector<float> cfo_offset;
-    std::vector<int> pilot_idxs = {1, 8, 15, 22, 29, 35, 92, 99, 106, 113, 120, 127};
+    std::vector<int> pilot_idxs = {1, 8, 17, 25, 36, 92, 100, 109, 119, 127};
     std::vector<int> zeros_idxs;
     std::vector<bool> is_pilot;
     std::vector<bool> is_zeros;
@@ -34,14 +34,15 @@ struct sharedData
 
     float rx_gain = 20.f;
     float tx_gain = 80.f;
-    float rx_frequency = 2.3e9;
-    float tx_frequency = 2.3e9;
+    float rx_frequency = 2.8e9;
+    float tx_frequency = 2.8e9;
     float sample_rate = 1.92e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
     int cyclic_prefex = 32;
     int subcarrier = 128;
     int sync_pos = 0;
+    int sync_offset = 0;
     int mtu = 1920;
     int buffer = 3840;
     int zadoff_chu_u = 3;
@@ -86,13 +87,10 @@ struct sharedData
         for (auto &x : pilot_idxs)
             is_pilot[x] = true;
 
-        zeros_idxs.resize((128 / 2 + 27) - (128 / 2 - 28));
-        std::iota(zeros_idxs.begin(), zeros_idxs.end(), (128 / 2 - 28));
         is_zeros.resize(128, false);
-        for (auto &x : zeros_idxs)
-            is_zeros[x] = true;
-
-        is_zeros[0] = true;
+        for (int i = 0; i < 128; ++i)
+            if (i > 128 / 2 - 28 and i < 128 / 2 + 27 or i == 0)
+                is_zeros[i] = true;
 
         tx_buffer_one_time.resize(rx_mtu * 2, 0);
         tx_buffer.resize(rx_mtu * 2, 0);

@@ -16,7 +16,7 @@ class SDRDevice
     size_t rx_mtu;
     size_t tx_mtu;
     double sample_rate = 1.92e6;
-    double frequency = 2.3e9;
+    double frequency = 2.8e9;
     double rx_gain = 20.0;
     double tx_gain = 80.0;
     double bandwidth = 1e6;
