@@ -17,3 +17,6 @@
 [submodule "pluto/dev/third_party/SoapyPlutoSDR"]
 	path = pluto/dev/third_party/SoapyPlutoSDR
 	url = https://github.com/TelecomDep/SoapyPlutoSDR.git
+[submodule "pluto/dev/third_party/libiio-0.25"]
+	path = pluto/dev/third_party/libiio-0.25
+	url = https://github.com/analogdevicesinc/libiio.git
