@@ -5,9 +5,6 @@
 	path = pluto/dev/third_party/imgui
 	url = https://github.com/ocornut/imgui.git
 	branch = docking
-[submodule "pluto/dev/SoapySDR"]
-	path = pluto/dev/SoapySDR
-	url = https://github.com/TelecomDep/SoapySDR.git
 [submodule "pluto/dev/third_party/SoapySDR"]
 	path = pluto/dev/third_party/SoapySDR
 	url = https://github.com/TelecomDep/SoapySDR.git
