@@ -3,13 +3,11 @@
 #include "sharedData.hpp"
 #include "types.hpp"
 
-#include "backends/imgui_impl_opengl3.h"
-#include "backends/imgui_impl_sdl2.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include <GLFW/glfw3.h>
 #include "imgui.h"
 #include "implot.h"
-#include <GL/glew.h>
-#include <SDL2/SDL.h>
-#include <SDL_video.h>
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Types.h>
@@ -63,74 +61,41 @@ void run_backend(sharedData &sh_data)
             continue;
         }
 
-        if (sh_data.flags.read)
+        std::vector<int16_t> local_tx(sh_data.mtu * 2);
         {
-            if (sh_data.flags.constant_mode && !sh_data.flags.one_time_mode)
-            {
-                void *tx_buffs[] = {sh_data.tx_buffer.data()};
-                void *rx_buffs[] = {sdr.rx_buffer.data()};
+            std::lock_guard<std::mutex> lock(sh_data.sync.tx_mutex);
+            auto &src = sh_data.flags.one_time_mode ? 
+                sh_data.tx_buffer_one_time : sh_data.tx_buffer;
+            std::copy(src.begin(), src.begin() + sh_data.mtu * 2, local_tx.begin());
+        }
+        
+        void *tx_buffs[] = {local_tx.data()};
+        void *rx_buffs[] = {sdr.rx_buffer.data()};
 
-                int flags = 0;
-                long long timeNs = 0;
+        int flags = 0;
+        long long timeNs = 0;
 
-                int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
-                if (sr != sh_data.mtu)
-                    std::cout << "[ERROR] Read stream | Error code: " << sr << "\n";
+        int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sh_data.mtu, &flags, &timeNs, TIMEOUT);
+        if (sr < 0)
+            std::cout << "[ERROR] Read stream | Error code: " << sr << "\n";
 
-                long long tx_time = timeNs + TX_DELAY;
-                flags = SOAPY_SDR_HAS_TIME;
+        long long tx_time = timeNs + TX_DELAY;
+        flags = SOAPY_SDR_HAS_TIME;
 
-                if (sh_data.flags.changed_send)
-                {
-                    int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
-                    if (st != sh_data.mtu)
-                        std::cout << "[ERROR] Write stream | Error code: " << st << "\n";
-                }
-
-                for (int i = 0; i < sh_data.mtu; ++i)
-                    sh_data.rx_complex[i] = std::complex<float>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
-
-                sh_data.flags.read = false;
-                sh_data.flags.dsp = true;
-            }
-
-            if (sh_data.flags.one_time_mode && !sh_data.flags.constant_mode)
-            {
-                void *tx_buffs[] = {sh_data.tx_buffer_one_time.data()};
-                void *rx_buffs[] = {sdr.rx_buffer.data()};
-
-                int flags = 0;
-                long long timeNs = 0;
-
-                int sr = SoapySDRDevice_readStream(sdr.sdr, sdr.rxStream, rx_buffs, sdr.rx_mtu, &flags, &timeNs, TIMEOUT);
-                if (sr != sh_data.mtu)
-                    std::cout << "[ERROR] Read stream | Error code: " << sr << "\n";
-
-                long long tx_time = timeNs + TX_DELAY;
-                flags = SOAPY_SDR_HAS_TIME;
-
-                if (sh_data.flags.changed_send)
-                {
-                    int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sdr.tx_mtu, &flags, tx_time, TIMEOUT);
-                    if (st != sh_data.mtu)
-                        std::cout << "[ERROR] Write stream | Error code: " << st << "\n";
-                }
-
-                for (int i = 0; i < sh_data.mtu; ++i)
-                    sh_data.rx_complex[i] = std::complex<float>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
-
-                sh_data.flags.read = false;
-                sh_data.flags.dsp = true;
-            }
+        if (sh_data.flags.changed_send)
+        {
+            int st = SoapySDRDevice_writeStream(sdr.sdr, sdr.txStream, tx_buffs, sh_data.mtu, &flags, tx_time, TIMEOUT);
+            if (st < 0)
+                std::cout << "[ERROR] Write stream | Error code: " << st << "\n";
         }
 
-        static auto last_gain_update = std::chrono::steady_clock::now();
-        auto now = std::chrono::steady_clock::now();
-
-        if (now - last_gain_update > std::chrono::milliseconds(1000))
+        if (sh_data.flags.read)
         {
-            sh_data.rx_gain = SoapySDRDevice_getGain(sdr.sdr, SOAPY_SDR_RX, 0);
-            last_gain_update = now;
+            for (int i = 0; i < sh_data.mtu; ++i)
+                sh_data.rx_complex[i] = std::complex<float>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
+
+            sh_data.flags.read = false;
+            sh_data.flags.dsp = true;
         }
 
         if (sh_data.flags.changed_rx_gain)
@@ -231,6 +196,12 @@ void run_dsp(sharedData &sh_data)
             continue;
         }
 
+        if (!sh_data.flags.form && !sh_data.flags.dsp)
+        {
+            std::this_thread::yield();
+            continue;
+        }
+
         if (sh_data.flags.form)
         {
             if (sh_data.flags.constant_mode && !sh_data.flags.one_time_mode)
@@ -240,16 +211,18 @@ void run_dsp(sharedData &sh_data)
 
                 if (sh_data.flags.changed_pss_symbols)
                 {
-                    append_symbol(zad_off_chu_context, sh_data.tx_buffer, sh_data.cyclic_prefex, 0);
+                    append_symbol(zad_off_chu_context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, 0);
                     start_idx = 2 * ofdm_symbol;
                 }
 
                 for (int start = start_idx; start <= sh_data.buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
                 {
                     build_ofdm_symbol_prbs(prbs15, context, sh_data);
-                    append_symbol(context, sh_data.tx_buffer, sh_data.cyclic_prefex, start);
+                    append_symbol(context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, start);
                 }
 
+                std::lock_guard<std::mutex> lock(sh_data.sync.tx_mutex);
+                sh_data.tx_buffer.swap(sh_data.tx_buffer_back);
                 sh_data.flags.form = false;
                 sh_data.flags.read = true;
             }
@@ -268,16 +241,17 @@ void run_dsp(sharedData &sh_data)
 
                 if (sh_data.flags.changed_pss_symbols)
                 {
-                    append_symbol(zad_off_chu_context, sh_data.tx_buffer_one_time, sh_data.cyclic_prefex, 0);
+                    append_symbol(zad_off_chu_context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, 0);
                     start_idx = 2 * ofdm_symbol;
                 }
 
                 for (int start = start_idx; start <= sh_data.buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
                 {
                     build_ofdm_symbol(message_bits, context, sh_data, offset);
-                    append_symbol(context, sh_data.tx_buffer_one_time, sh_data.cyclic_prefex, start);
+                    append_symbol(context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, start);
                 }
 
+                sh_data.tx_buffer_one_time.swap(sh_data.tx_buffer_back);
                 sh_data.flags.form = false;
                 sh_data.flags.read = true;
             }
@@ -363,48 +337,47 @@ void run_gui(sharedData &sh_data)
     int cur_rx_bandwidth = 1;
     int cur_tx_bandwidth = 1;
 
-    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
-    SDL_Window *window =
-        SDL_CreateWindow("GUI", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    SDL_GL_SetSwapInterval(0);
+    if (!glfwInit()) return;
 
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    #ifdef __APPLE__
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    #endif
+
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "MMS", nullptr, nullptr);
+    if (!window) return;
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
+
+    IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImPlot::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
+    ImGui::StyleColorsDark();
+    ImGuiIO& io = ImGui::GetIO();
 
-    static const ImVec4 plot_colors[4] = {ImVec4(0.26f, 0.65f, 0.98f, 1.00f), ImVec4(1.00f, 0.50f, 0.20f, 1.00f)};
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-    ImPlot::AddColormap("PlotPalete", plot_colors, 2);
-
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
-    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
-    bool running = true;
-    while (running)
+    while (!glfwWindowShouldClose(window))
     {
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
-        {
-            ImGui_ImplSDL2_ProcessEvent(&event);
-            if (event.type == SDL_QUIT)
-            {
-                running = false;
-            }
-        }
+        glfwPollEvents();
 
         ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
+        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+
+        // Start GUI
 
         const float *raw_data = reinterpret_cast<const float *>(sh_data.rx_complex.data());
         const float *dsp_data = reinterpret_cast<const float *>(sh_data.rx_complex_fft_gui.data());
 
-        ImPlot::PushColormap("PlotPalete");
         if (ImGui::Begin("Scatter Raw"))
         {
             if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
@@ -575,7 +548,6 @@ void run_gui(sharedData &sh_data)
                 ImGui::End();
             }
         }
-        ImPlot::PopColormap();
 
         if (ImGui::BeginMainMenuBar())
         {
@@ -805,33 +777,47 @@ void run_gui(sharedData &sh_data)
             ImGui::EndMainMenuBar();
         }
 
+        // End GUI
+
         ImGui::Render();
+
+        int w, h;
+        glfwGetFramebufferSize(window, &w, &h);
+        glViewport(0, 0, w, h);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        SDL_GL_SwapWindow(window);
+
+        glfwSwapBuffers(window);
+        
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            GLFWwindow* backup = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backup);
+        }
     }
-    sh_data.flags.changed_quit = true;
+
     ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
-    SDL_GL_DeleteContext(gl_context);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    return;
 }
 
 int main()
 {
     sharedData sd(1920);
 
-    std::thread gui_thread(run_gui, std::ref(sd));
     std::thread backend_thread(run_backend, std::ref(sd));
     std::thread dsp_thread(run_dsp, std::ref(sd));
+    run_gui(sd);
 
     dsp_thread.join();
     backend_thread.join();
-    gui_thread.join();
 
     return 0;
 }

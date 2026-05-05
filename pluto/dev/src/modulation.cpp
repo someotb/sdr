@@ -14,6 +14,10 @@
 #include <string>
 #include <vector>
 
+#ifndef M_PIf
+#define M_PIf (float)M_PI
+#endif
+
 int bits_per_symbol(ModulationType mod)
 {
     switch (mod)
@@ -284,7 +288,8 @@ void build_pss_zadoff_chu(FFT_Context &context, sharedData &sh_data)
     {
         float phase = -(M_PIf * (float)sh_data.zadoff_chu_u * (float)n * (float)(n + cf + 2 * q)) / (float)N_zc;
         float sin, cos;
-        sincosf(phase, &sin, &cos);
+        sin = sinf(phase);
+        cos = cosf(phase);
         context.in[n][0] = cos;
         context.in[n][1] = sin;
     }

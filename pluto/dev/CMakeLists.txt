@@ -1,62 +1,64 @@
-cmake_minimum_required(VERSION 3.16)
-project(PlutoSDR CXX)
+cmake_minimum_required(VERSION 3.14)
+project(main)
 
-set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 20)
 
-set(THIRD_PARTY_DIR ${PROJECT_SOURCE_DIR}/third_party)
-set(SRC_DIR ${PROJECT_SOURCE_DIR}/src)
-set(INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
+find_package(glfw3 REQUIRED)
+find_package(OpenGL REQUIRED)
+
+set(IMGUI_DIR ${PROJECT_SOURCE_DIR}/third_party/imgui)
+set(IMPLOT_DIR ${PROJECT_SOURCE_DIR}/third_party/implot)
+set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
+
+# FFTW3
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFTW3F REQUIRED fftw3f)
+
+link_directories(${FFTW3F_LIBRARY_DIRS})
 
 find_package(SoapySDR REQUIRED)
-find_package(OpenGL REQUIRED)
-find_package(GLEW REQUIRED)
-find_package(SDL2 REQUIRED)
-find_library(FFTW_LIB fftw3f)
-find_package(OpenMP REQUIRED)
 
-include_directories(${INCLUDE_DIR})
-include_directories(${SDL2_INCLUDE_DIRS})
-
-add_library(imgui STATIC
-    ${THIRD_PARTY_DIR}/imgui/imgui.cpp
-    ${THIRD_PARTY_DIR}/imgui/imgui_draw.cpp
-    ${THIRD_PARTY_DIR}/imgui/imgui_demo.cpp
-    ${THIRD_PARTY_DIR}/imgui/imgui_tables.cpp
-    ${THIRD_PARTY_DIR}/imgui/imgui_widgets.cpp
-    ${THIRD_PARTY_DIR}/imgui/backends/imgui_impl_sdl2.cpp
-    ${THIRD_PARTY_DIR}/imgui/backends/imgui_impl_opengl3.cpp
-)
-target_include_directories(imgui PUBLIC ${THIRD_PARTY_DIR}/imgui)
-target_compile_options(imgui PRIVATE -fPIC)
-target_link_libraries(imgui PRIVATE ${SDL2_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES})
-
-add_library(implot STATIC
-    ${THIRD_PARTY_DIR}/implot/implot.cpp
-    ${THIRD_PARTY_DIR}/implot/implot_demo.cpp
-    ${THIRD_PARTY_DIR}/implot/implot_items.cpp
+# ImGui
+set(IMGUI_SOURCES
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
-target_include_directories(implot PUBLIC ${THIRD_PARTY_DIR}/implot)
-target_link_libraries(implot PRIVATE imgui)
-
-set(MAIN_SOURCE_FILES
-    ${SRC_DIR}/main.cpp
-    ${SRC_DIR}/modulation.cpp
-    ${SRC_DIR}/fftlib.cpp
+# ImPlot
+set(IMPLOT_SOURCES
+    ${IMPLOT_DIR}/implot.cpp
+    ${IMPLOT_DIR}/implot_demo.cpp
+    ${IMPLOT_DIR}/implot_items.cpp
 )
 
-add_executable(main ${MAIN_SOURCE_FILES})
+add_executable(${PROJECT_NAME}
+    ${SOURCE_DIR}/main.cpp
+    ${SOURCE_DIR}/modulation.cpp
+    ${SOURCE_DIR}/fftlib.cpp
+    ${IMGUI_SOURCES}
+    ${IMPLOT_SOURCES}
+)
 
-target_compile_options(main PRIVATE -O3 -mavx2 -ffast-math)
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+    ${IMPLOT_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+    ${SoapySDR_INCLUDE_DIRS}
+)
 
-target_link_libraries(main PRIVATE
-    imgui
-    implot
-    OpenMP::OpenMP_CXX
-    ${FFTW_LIB}
-    ${SDL2_LIBRARIES}
-    ${OPENGL_LIBRARIES}
-    ${GLEW_LIBRARIES}
-    ${SoapySDR_LIBRARIES}
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    GL_SILENCE_DEPRECATION    
+)
+
+target_link_libraries(${PROJECT_NAME}
+    glfw
+    OpenGL::GL
+    ${FFTW3F_LIBRARIES}
+    SoapySDR
 )

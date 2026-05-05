@@ -7,6 +7,7 @@
 #include <numeric>
 #include <string>
 #include <vector>
+#include <mutex>
 
 struct sharedData
 {
@@ -17,6 +18,7 @@ struct sharedData
     std::vector<std::complex<float>> rx_complex_fft_gui;
     std::vector<int16_t> tx_buffer;
     std::vector<int16_t> tx_buffer_one_time;
+    std::vector<int16_t> tx_buffer_back;
     std::vector<float> demaped_bits;
     std::vector<float> bits;
     std::vector<float> shifted_magnitude;
@@ -79,7 +81,14 @@ struct sharedData
         std::atomic<bool> cfo_cor = false;
         std::atomic<bool> equal = false;
         std::atomic<bool> check_bits = false;
+        std::atomic<bool> tx_buffer_ready = false;
     } flags;
+
+    struct sync
+    {
+        std::mutex tx_mutex;
+    } sync;
+    
 
     sharedData(size_t rx_mtu)
     {
@@ -100,5 +109,6 @@ struct sharedData
         shifted_magnitude.resize(rx_mtu, 0);
         argument.resize(rx_mtu, 0);
         frequency_axis.resize(rx_mtu, 0);
+        tx_buffer_back.resize(rx_mtu * 2, 0);
     }
 };
