@@ -56,6 +56,8 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
                 int start_idx = 0;
                 prbs15.state = 0xACE1;
 
+                calculate_pilots(sh_data);
+
                 if (sh_data.flags.changed_pss_symbols)
                 {
                     append_symbol(zad_off_chu_context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, 0);
@@ -79,6 +81,8 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
                 int start_idx = 0;
                 int offset = 0;
                 std::vector<uint8_t> message_bits;
+
+                calculate_pilots(sh_data);
 
                 if (!sh_data.message.empty())
                     message_bits = str_to_bits(sh_data.message);

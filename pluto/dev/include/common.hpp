@@ -62,10 +62,9 @@ struct sharedData
     std::vector<float> zadoff_corr_arr;
     std::vector<float> milisecs;
     std::vector<float> cfo_offset;
-    std::vector<int> pilot_idxs = {1, 8, 17, 25, 36, 92, 100, 109, 119, 127};
-    std::vector<int> zeros_idxs;
     std::vector<bool> is_pilot;
     std::vector<bool> is_zeros;
+    std::vector<int> pilot_idxs;
     std::string message = "Hello World!";
     std::string dec_message = "Hello World!";
 
@@ -84,8 +83,8 @@ struct sharedData
     int buffer = 3840;
     int zadoff_chu_u = 3;
     int err_cnt = 0;
+    int cnt_pilots = 4;
     char input_buffer[256] = "";
-
 
     struct flags
     {
@@ -127,12 +126,9 @@ struct sharedData
     sharedData(size_t rx_mtu)
     {
         is_pilot.resize(128, false);
-        for (auto &x : pilot_idxs)
-            is_pilot[x] = true;
-
         is_zeros.resize(128, false);
         for (int i = 0; i < 128; ++i)
-            if ((i > 128 / 2 - 28 and i < 128 / 2 + 27) or i == 0)
+            if ((i > 128 / 2 - 28 and i < 128 / 2 + 28) or i == 0)
                 is_zeros[i] = true;
 
         tx_buffer_one_time.resize(rx_mtu * 2, 0);

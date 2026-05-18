@@ -8,7 +8,6 @@
 int main()
 {
     sharedData sd(1920);
-
     std::jthread sdr_thread(run_sdr, std::ref(sd));
     std::jthread dsp_thread(run_dsp, std::ref(sd));
     run_gui(sd);

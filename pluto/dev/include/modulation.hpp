@@ -47,3 +47,5 @@ void check_demapping(const std::vector<float> &in_signal, sharedData &sh_data);
 std::vector<uint8_t> str_to_bits(const std::string &in);
 
 std::string bits_to_str(const std::vector<float> &bits);
+
+void calculate_pilots(sharedData &sh_data);

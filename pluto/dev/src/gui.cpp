@@ -23,7 +23,7 @@ void run_gui(sharedData &sh_data)
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     #endif
 
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "MMS", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "SDR", nullptr, nullptr);
     if (!window) return;
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
@@ -325,6 +325,7 @@ void run_gui(sharedData &sh_data)
 
                 ImGui::InputInt("Cycle Prefix", &sh_data.cyclic_prefex, 1);
                 ImGui::InputInt("Subcarrier", &sh_data.subcarrier, 1);
+                ImGui::SliderInt("Pilots", &sh_data.cnt_pilots, 1, 100);
 
                 ImGui::SeparatorText("SDR Configuration");
                 ImGui::SetNextItemWidth(-FLT_MIN);

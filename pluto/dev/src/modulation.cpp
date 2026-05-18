@@ -671,3 +671,41 @@ std::string bits_to_str(const std::vector<float> &bits)
     }
     return message;
 }
+
+void calculate_pilots(sharedData &sh_data)
+{
+    int cnt_pilot = sh_data.cnt_pilots;
+    if (cnt_pilot <= 0)
+        throw std::invalid_argument("Count of pilots can not be <= 0");
+    if (cnt_pilot > sh_data.subcarrier)
+        throw std::invalid_argument("Too many pilots");
+
+    std::fill(sh_data.is_pilot.begin(), sh_data.is_pilot.end(), false);
+    sh_data.pilot_idxs.clear();
+
+    std::vector<int> active;
+    for (size_t i = 0; i < sh_data.is_zeros.size(); ++i)
+        if (!sh_data.is_zeros[i])
+            active.push_back(i);
+
+    size_t n = active.size();
+
+    for (int p = 0; p < cnt_pilot; ++p)
+    {
+        size_t idx = (p * n) / cnt_pilot;
+        sh_data.is_pilot[active[idx]] = true;
+    }
+
+    for (size_t i = 0; i < active.size(); ++i)
+    {
+        bool is_start = (i == 0) || (active[i] - active[i-1] > 1);
+        bool is_end = (i == n-1) || (active[i+1] - active[i] > 1);
+
+        if (is_start || is_end)
+            sh_data.is_pilot[active[i]] = true;
+    }
+
+    for (size_t i = 0; i < sh_data.is_pilot.size(); ++i)
+        if (sh_data.is_pilot[i])
+            sh_data.pilot_idxs.push_back(i);
+}
