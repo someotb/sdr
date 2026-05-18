@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(main)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(glfw3 REQUIRED)
 find_package(OpenGL REQUIRED)
@@ -37,9 +38,12 @@ set(IMPLOT_SOURCES
 )
 
 add_executable(${PROJECT_NAME}
-    ${SOURCE_DIR}/main.cpp
     ${SOURCE_DIR}/modulation.cpp
-    ${SOURCE_DIR}/fftlib.cpp
+    ${SOURCE_DIR}/common.cpp
+    ${SOURCE_DIR}/sdr.cpp
+    ${SOURCE_DIR}/dsp.cpp
+    ${SOURCE_DIR}/gui.cpp
+    ${SOURCE_DIR}/main.cpp
     ${IMGUI_SOURCES}
     ${IMPLOT_SOURCES}
 )
@@ -53,7 +57,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    GL_SILENCE_DEPRECATION    
+    GL_SILENCE_DEPRECATION
 )
 
 target_link_libraries(${PROJECT_NAME}

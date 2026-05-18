@@ -1,11 +1,14 @@
 #pragma once
 
+#include "common.hpp"
+
 #include <SoapySDR/Constants.h>
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <cstdint>
 #include <iostream>
 #include <vector>
+#include <stop_token>
 
 class SDRDevice
 {
@@ -82,3 +85,5 @@ class SDRDevice
         }
     }
 };
+
+void run_sdr(std::stop_token stoken, sharedData &sh_data);

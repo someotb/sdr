@@ -1,8 +1,5 @@
-#include "fftlib.hpp"
 #include "modulation.hpp"
-#include "prbs15.hpp"
-#include "sharedData.hpp"
-#include "types.hpp"
+#include "common.hpp"
 
 #include <cmath>
 #include <complex>
@@ -294,7 +291,7 @@ void build_pss_zadoff_chu(FFT_Context &context, sharedData &sh_data)
         context.in[n][1] = sin;
     }
 
-    ifft(context);
+    context.ifft();
 }
 
 void build_ofdm_symbol_prbs(PRBS15 &gen, FFT_Context &context, const sharedData &sh_data)
@@ -319,7 +316,7 @@ void build_ofdm_symbol_prbs(PRBS15 &gen, FFT_Context &context, const sharedData 
         }
     }
 
-    ifft(context);
+    context.ifft();
 }
 
 void build_ofdm_symbol(std::vector<uint8_t> &in, FFT_Context &context, const sharedData &sh_data, int &offset)
@@ -344,7 +341,7 @@ void build_ofdm_symbol(std::vector<uint8_t> &in, FFT_Context &context, const sha
         }
     }
 
-    ifft(context);
+    context.ifft();
 }
 
 void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start)
@@ -352,7 +349,6 @@ void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_pr
     float SCALE = 16000.f;
     int N = context.N;
 
-#pragma omp simd
     for (int j = 0; j < cyclic_prefex; ++j)
     {
         int src_idx = N - cyclic_prefex + j;
@@ -361,7 +357,6 @@ void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_pr
     }
 
     int symbol_offset = start + 2 * cyclic_prefex;
-#pragma omp simd
     for (int k = 0; k < N; ++k)
     {
         tx[symbol_offset + 2 * k] = static_cast<int16_t>(context.out[k][0] * SCALE);
@@ -379,7 +374,7 @@ void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &s
         context.in[i][1] = std::imag(in_signal[i]) / 32768.0;
     }
 
-    fft(context);
+    context.fft();
 
     for (size_t i = 0; i < in_signal.size(); ++i)
     {
@@ -407,7 +402,6 @@ int zadoff_sync(const float *__restrict signal_re, const float *__restrict signa
         float sum_re = 0.0f;
         float sum_im = 0.0f;
 
-#pragma omp simd reduction(+ : sum_re, sum_im)
         for (size_t k = 0; k < zc_len; ++k)
         {
             sum_re += signal_re[n + k] * zc_re[k] + signal_im[n + k] * zc_im[k];
@@ -516,7 +510,7 @@ void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::comple
             context.in[j][1] = std::imag(in_signal[j + (i * context.N)]);
         }
 
-        fft(context);
+        context.fft();
 
         for (int k = 0; k < context.N; ++k)
             out_signal.push_back(std::complex<float>(context.out[k][0], context.out[k][1]));
@@ -596,7 +590,6 @@ void split_to_float(const std::complex<float> *__restrict src, float *__restrict
 {
     const float *raw_src = reinterpret_cast<const float *>(src);
 
-#pragma omp simd
     for (size_t i = 0; i < n; ++i)
     {
         dst_re[i] = raw_src[2 * i];
@@ -606,7 +599,6 @@ void split_to_float(const std::complex<float> *__restrict src, float *__restrict
 
 void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, size_t num_samples)
 {
-#pragma omp simd
     for (size_t i = 0; i < num_samples; ++i)
     {
         dst_re[i] = static_cast<float>(src[2 * i]) / 32768.0f;

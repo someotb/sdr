@@ -1,9 +1,6 @@
 #pragma once
 
-#include "fftlib.hpp"
-#include "prbs15.hpp"
-#include "sharedData.hpp"
-#include "types.hpp"
+#include "common.hpp"
 
 #include <cmath>
 #include <complex>

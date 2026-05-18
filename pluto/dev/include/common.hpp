@@ -1,13 +1,48 @@
 #pragma once
 
-#include "types.hpp"
-
+#include <fftw3.h>
 #include <atomic>
 #include <complex>
-#include <numeric>
 #include <string>
 #include <vector>
 #include <mutex>
+
+class FFT_Context
+{
+    private:
+        fftwf_plan plan_forward;
+        fftwf_plan plan_backward;
+
+    public:
+        int N;
+        fftwf_complex *in;
+        fftwf_complex *out;
+        FFT_Context(int n);
+        ~FFT_Context();
+        void fft();
+        void ifft();
+};
+
+enum class ModulationType
+{
+    BPSK,
+    QPSK,
+    QAM16,
+    QAM64,
+    QAM256
+};
+
+struct PRBS15
+{
+    uint16_t state = 0xACE1;
+
+    int get_bit()
+    {
+        int new_bit = ((state >> 14) ^ (state >> 13)) & 1;
+        state = (state << 1) | new_bit;
+        return new_bit & 1;
+    }
+};
 
 struct sharedData
 {
@@ -60,7 +95,6 @@ struct sharedData
         std::atomic<bool> read = false;
         std::atomic<bool> dsp = false;
         std::atomic<bool> changed_send = false;
-        std::atomic<bool> changed_quit = false;
         std::atomic<bool> changed_rx_gain = false;
         std::atomic<bool> changed_tx_gain = false;
         bool rx_gain_mode = false;
@@ -88,7 +122,7 @@ struct sharedData
     {
         std::mutex tx_mutex;
     } sync;
-    
+
 
     sharedData(size_t rx_mtu)
     {
@@ -98,7 +132,7 @@ struct sharedData
 
         is_zeros.resize(128, false);
         for (int i = 0; i < 128; ++i)
-            if (i > 128 / 2 - 28 and i < 128 / 2 + 27 or i == 0)
+            if ((i > 128 / 2 - 28 and i < 128 / 2 + 27) or i == 0)
                 is_zeros[i] = true;
 
         tx_buffer_one_time.resize(rx_mtu * 2, 0);
