@@ -1,5 +1,6 @@
 #include "sdr.hpp"
 
+#include <iostream>
 #include <stop_token>
 #include <thread>
 
@@ -47,6 +48,7 @@ SDRDevice::SDRDevice(const char *usb) : sdr(nullptr), rxStream(nullptr), txStrea
 
 SDRDevice::~SDRDevice()
 {
+    std::cout << "SDRDevice Destructor Called\n";
     if (sdr)
     {
         if (rxStream)
