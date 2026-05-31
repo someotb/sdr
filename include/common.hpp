@@ -90,9 +90,6 @@ struct sharedData
     {
         std::atomic<bool> constant_mode = false;
         std::atomic<bool> one_time_mode = false;
-        std::atomic<bool> form = true;
-        std::atomic<bool> read = false;
-        std::atomic<bool> dsp = false;
         std::atomic<bool> changed_send = false;
         std::atomic<bool> changed_rx_gain = false;
         std::atomic<bool> changed_tx_gain = false;
