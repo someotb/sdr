@@ -71,7 +71,7 @@ void run_sdr(std::stop_token stoken, sharedData &sh_data)
     SoapySDRKwargs *results = SoapySDRDevice_enumerate(nullptr, &length);
     sh_data.devices.clear();
 
-    for (size_t i = 0; i < length / 2; ++i)
+    for (size_t i = 0; i < length; ++i)
     {
         std::string label = static_cast<std::string>(results[i].vals[3]);
         sh_data.devices.push_back(label);
