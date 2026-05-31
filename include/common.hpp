@@ -120,6 +120,7 @@ struct sharedData
     struct sync
     {
         std::mutex tx_mutex;
+        std::mutex rx_mutex;
     } sync;
 
 

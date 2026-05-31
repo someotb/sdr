@@ -120,13 +120,10 @@ void run_sdr(std::stop_token stoken, sharedData &sh_data)
                 std::cout << "[ERROR] Write stream | Error code: " << st << "\n";
         }
 
-        if (sh_data.flags.read)
         {
+            std::lock_guard<std::mutex> lock(sh_data.sync.rx_mutex);
             for (int i = 0; i < sh_data.mtu; ++i)
                 sh_data.rx_complex[i] = std::complex<float>(sdr.rx_buffer[2 * i], sdr.rx_buffer[2 * i + 1]);
-
-            sh_data.flags.read = false;
-            sh_data.flags.dsp = true;
         }
 
         if (sh_data.flags.changed_rx_gain)
