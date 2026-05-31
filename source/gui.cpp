@@ -57,8 +57,9 @@ void run_gui(sharedData &sh_data)
         {
             if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 1.5f, ImPlot::GetColormapColor(0), 1.0f, ImPlot::GetColormapColor(0));
-                ImPlot::PlotScatter("I/Q", raw_data, raw_data + 1, sh_data.rx_complex.size(), 0, 0, sizeof(std::complex<float>));
+                ImPlotSpec spec;
+                spec.Stride = sizeof(std::complex<float>);
+                ImPlot::PlotScatter("I/Q", raw_data, raw_data + 1, sh_data.rx_complex.size(), spec);
                 ImPlot::EndPlot();
             }
         }
@@ -66,10 +67,11 @@ void run_gui(sharedData &sh_data)
 
         if (ImGui::Begin("Scatter FFT"))
         {
-            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 1.5f, ImPlot::GetColormapColor(0), 1.0f, ImPlot::GetColormapColor(0));
             if (ImPlot::BeginPlot("Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                ImPlot::PlotScatter("I/Q", dsp_data, dsp_data + 1, sh_data.rx_complex_fft_gui.size(), 0, 0, sizeof(std::complex<float>));
+                ImPlotSpec spec;
+                spec.Stride = sizeof(std::complex<float>);
+                ImPlot::PlotScatter("I/Q", dsp_data, dsp_data + 1, sh_data.rx_complex_fft_gui.size(), spec);
                 ImPlot::EndPlot();
             }
         }
@@ -79,8 +81,11 @@ void run_gui(sharedData &sh_data)
         {
             if (ImPlot::BeginPlot("Raw I/Q samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                ImPlot::PlotLine("I", raw_data, sh_data.rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
-                ImPlot::PlotLine("Q", raw_data + 1, sh_data.rx_complex.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
+                int count = sh_data.rx_complex.size();
+                ImPlotSpec spec;
+                spec.Stride = sizeof(std::complex<float>);
+                ImPlot::PlotLine("I", raw_data, count, 1.0, 0.0, spec);
+                ImPlot::PlotLine("Q", raw_data + 1, count, 1.0, 0.0, spec);
                 ImPlot::EndPlot();
             }
         }
@@ -90,8 +95,11 @@ void run_gui(sharedData &sh_data)
         {
             if (ImPlot::BeginPlot("I/Q Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                ImPlot::PlotLine("I", dsp_data, sh_data.rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
-                ImPlot::PlotLine("Q", dsp_data + 1, sh_data.rx_complex_fft_gui.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
+                int count = sh_data.rx_complex_fft_gui.size();
+                ImPlotSpec spec;
+                spec.Stride = sizeof(std::complex<float>);
+                ImPlot::PlotLine("I", dsp_data, count, 1.0, 0, spec);
+                ImPlot::PlotLine("Q", dsp_data + 1, count, 1.0, 0, spec);
                 ImPlot::EndPlot();
             }
         }
