@@ -21,48 +21,52 @@ find_package(SoapySDR REQUIRED)
 
 # ImGui
 set(IMGUI_SOURCES
-    ${IMGUI_DIR}/imgui.cpp
-    ${IMGUI_DIR}/imgui_draw.cpp
-    ${IMGUI_DIR}/imgui_demo.cpp
-    ${IMGUI_DIR}/imgui_tables.cpp
-    ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+  ${IMGUI_DIR}/imgui.cpp
+  ${IMGUI_DIR}/imgui_draw.cpp
+  ${IMGUI_DIR}/imgui_demo.cpp
+  ${IMGUI_DIR}/imgui_tables.cpp
+  ${IMGUI_DIR}/imgui_widgets.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
 # ImPlot
 set(IMPLOT_SOURCES
-    ${IMPLOT_DIR}/implot.cpp
-    ${IMPLOT_DIR}/implot_demo.cpp
-    ${IMPLOT_DIR}/implot_items.cpp
+  ${IMPLOT_DIR}/implot.cpp
+  ${IMPLOT_DIR}/implot_demo.cpp
+  ${IMPLOT_DIR}/implot_items.cpp
+)
+
+set(MAIN_SOURCES
+  ${SOURCE_DIR}/modulation.cpp
+  ${SOURCE_DIR}/common.cpp
+  ${SOURCE_DIR}/sdr.cpp
+  ${SOURCE_DIR}/dsp.cpp
+  ${SOURCE_DIR}/gui.cpp
+  ${SOURCE_DIR}/main.cpp
 )
 
 add_executable(${PROJECT_NAME}
-    ${SOURCE_DIR}/modulation.cpp
-    ${SOURCE_DIR}/common.cpp
-    ${SOURCE_DIR}/sdr.cpp
-    ${SOURCE_DIR}/dsp.cpp
-    ${SOURCE_DIR}/gui.cpp
-    ${SOURCE_DIR}/main.cpp
-    ${IMGUI_SOURCES}
-    ${IMPLOT_SOURCES}
+  ${MAIN_SOURCES}
+  ${IMGUI_SOURCES}
+  ${IMPLOT_SOURCES}
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${IMGUI_DIR}
-    ${IMGUI_DIR}/backends
-    ${IMPLOT_DIR}
-    ${PROJECT_SOURCE_DIR}/include
-    ${SoapySDR_INCLUDE_DIRS}
+  ${IMGUI_DIR}
+  ${IMGUI_DIR}/backends
+  ${IMPLOT_DIR}
+  ${PROJECT_SOURCE_DIR}/include
+  ${SoapySDR_INCLUDE_DIRS}
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    GL_SILENCE_DEPRECATION
+  GL_SILENCE_DEPRECATION
 )
 
 target_link_libraries(${PROJECT_NAME}
-    glfw
-    OpenGL::GL
-    ${FFTW3F_LIBRARIES}
-    SoapySDR
+  glfw
+  OpenGL::GL
+  ${FFTW3F_LIBRARIES}
+  SoapySDR
 )
