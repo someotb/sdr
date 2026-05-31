@@ -520,7 +520,7 @@ void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::comple
     }
 }
 
-void equalization(std::vector<std::complex<float>> &in_signal, const sharedData &sh_data, std::vector<std::complex<float>> &out_signal)
+void equalization(std::vector<std::complex<float>> &in_signal, sharedData &sh_data, std::vector<std::complex<float>> &out_signal)
 {
     out_signal.clear();
     out_signal.reserve(in_signal.size());
@@ -570,6 +570,15 @@ void equalization(std::vector<std::complex<float>> &in_signal, const sharedData 
 
         for (int k = sh_data.pilot_idxs.back() + 1; k < subcarrar; ++k)
             H[k] = H[sh_data.pilot_idxs.back()];
+
+        {
+            std::lock_guard<std::mutex> lock(sh_data.sync.channel_estimation_mutex);
+            if (sh_data.channel_estimation.size() >= (size_t)sh_data.mtu)
+                sh_data.channel_estimation.erase(sh_data.channel_estimation.begin(),
+                                                  sh_data.channel_estimation.begin() + sh_data.subcarrier);
+            for (const auto& h : H)
+                sh_data.channel_estimation.push_back(h);
+        }
 
         for (int k = 0; k < subcarrar; ++k)
         {

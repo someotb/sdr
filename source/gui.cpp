@@ -146,6 +146,27 @@ void run_gui(sharedData &sh_data)
         }
         ImGui::End();
 
+        std::vector<std::complex<float>> chan_estim_local;
+        {
+            std::lock_guard<std::mutex> lock(sh_data.sync.channel_estimation_mutex);
+            chan_estim_local = sh_data.channel_estimation;
+        }
+
+        const float* chan_estim = reinterpret_cast<const float*>(chan_estim_local.data());
+
+        if (ImGui::Begin("Channel Estimation"))
+        {
+            if (ImPlot::BeginPlot("##Channel Estimation", ImVec2(ImGui::GetContentRegionAvail())))
+            {
+                ImPlotSpec spec;
+                spec.Stride = sizeof(std::complex<float>);
+                ImPlot::PlotLine("I", chan_estim, chan_estim_local.size(), 1.0, 0.0, spec);
+                ImPlot::PlotLine("Q", chan_estim + 1, chan_estim_local.size(), 1.0, 0.0, spec);
+                ImPlot::EndPlot();
+            }
+        }
+        ImGui::End();
+
         if (sh_data.flags.debug)
         {
             if (ImGui::Begin("Latency"))
