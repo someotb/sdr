@@ -88,7 +88,7 @@ struct sharedData
 
     struct flags
     {
-        std::atomic<bool> constant_mode = false;
+        std::atomic<bool> constant_mode = true;
         std::atomic<bool> one_time_mode = false;
         std::atomic<bool> changed_send = false;
         std::atomic<bool> changed_rx_gain = false;
