@@ -105,9 +105,15 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
         auto start = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
+        std::vector<std::complex<float>> rx_local;
+        {
+            std::lock_guard<std::mutex> lock(sh_data.sync.rx_mutex);
+            rx_local = sh_data.rx_complex;
+        }
+
         if (sh_data.flags.get_zadoff_pos_loopback)
         {
-            split_to_float(sh_data.rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
+            split_to_float(rx_local.data(), signal_re.data(), signal_im.data(), signal_re.size());
             zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(),
                                         sh_data.zadoff_corr_arr.data());
             sh_data.sync_pos = zad_of_idx;
@@ -116,7 +122,7 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
 
         if (sh_data.flags.get_zadoff_pos)
         {
-            split_to_float(sh_data.rx_complex.data(), signal_re.data(), signal_im.data(), signal_re.size());
+            split_to_float(rx_local.data(), signal_re.data(), signal_im.data(), signal_re.size());
             zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(),
                                         sh_data.zadoff_corr_arr.data());
             if (zad_of_idx > 1920)
@@ -124,7 +130,7 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
             sh_data.sync_pos = zad_of_idx - sh_data.sync_offset;
         }
 
-        remove_pss(sh_data, rx_complex_remove_pss);
+        remove_pss(sh_data, rx_local, rx_complex_remove_pss);
 
         if (sh_data.flags.cfo_cor)
             cfo_correction(rx_complex_remove_pss, sh_data);
@@ -156,7 +162,10 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
             sh_data.rx_complex_fft_gui = sh_data.flags.equal ? rx_complex_eq : rx_complex_fft;
         }
 
-        spectrum(sh_data.rx_complex, sh_data.shifted_magnitude, sh_data.argument, context_spectre);
+        {
+            std::lock_guard<std::mutex> lock(sh_data.sync.magnitude_argument_mutex);
+            spectrum(rx_local, sh_data.shifted_magnitude, sh_data.argument, context_spectre);
+        }
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         auto end = std::chrono::steady_clock::now();

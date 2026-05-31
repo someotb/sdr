@@ -422,37 +422,40 @@ int zadoff_sync(const float *__restrict signal_re, const float *__restrict signa
     return best_idx;
 }
 
-void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &out_signal)
+void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal)
 {
     int ofdm_symbol = sh_data.subcarrier + sh_data.cyclic_prefex;
     out_signal.clear();
-    out_signal.reserve(sh_data.rx_complex.size() - ofdm_symbol);
+
+    if (in_signal.size() <= static_cast<size_t>(ofdm_symbol))
+        return;
+    out_signal.reserve(in_signal.size() - ofdm_symbol);
 
     if (sh_data.sync_pos < ofdm_symbol)
     {
         int start_idx = sh_data.sync_pos + ofdm_symbol;
-        int rem_samples = sh_data.rx_complex.size() - start_idx;
+        int rem_samples = in_signal.size() - start_idx;
         int cnt_samples = rem_samples / ofdm_symbol;
         int end_idx = start_idx + (cnt_samples * ofdm_symbol);
 
         for (int i = start_idx; i < end_idx; ++i)
-            out_signal.push_back(sh_data.rx_complex[i]);
+            out_signal.push_back(in_signal[i]);
     }
     else
     {
         int right_start_idx = sh_data.sync_pos + ofdm_symbol;
-        int rem_samples = sh_data.rx_complex.size() - right_start_idx;
+        int rem_samples = in_signal.size() - right_start_idx;
         int cnt_samples = rem_samples / ofdm_symbol;
         int end_idx = right_start_idx + (cnt_samples * ofdm_symbol);
 
         for (int i = right_start_idx; i < end_idx; ++i)
-            out_signal.push_back(sh_data.rx_complex[i]);
+            out_signal.push_back(in_signal[i]);
 
         int left_rem_buf_cnt = int(sh_data.sync_pos / ofdm_symbol);
         int left_start_idx = sh_data.sync_pos - left_rem_buf_cnt * ofdm_symbol;
 
         for (int i = left_start_idx; i < sh_data.sync_pos; ++i)
-            out_signal.push_back(sh_data.rx_complex[i]);
+            out_signal.push_back(in_signal[i]);
     }
 }
 

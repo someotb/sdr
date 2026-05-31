@@ -28,7 +28,7 @@ void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &s
 int zadoff_sync(const float *__restrict signal_re, const float *__restrict signal_im, size_t signal_len, const float *__restrict zc_re,
                 const float *__restrict zc_im, size_t zc_len, float *__restrict out_corr);
 
-void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &out_signal);
+void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal);
 
 void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData &sh_data);
 

@@ -5,6 +5,7 @@
 #include "imgui.h"
 #include "implot.h"
 
+#include <mutex>
 #include <vector>
 
 void run_gui(sharedData &sh_data)
@@ -50,8 +51,17 @@ void run_gui(sharedData &sh_data)
 
         // Start GUI
 
-        const float *raw_data = reinterpret_cast<const float *>(sh_data.rx_complex.data());
-        const float *dsp_data = reinterpret_cast<const float *>(sh_data.rx_complex_fft_gui.data());
+        std::vector<std::complex<float>> local_raw;
+        std::vector<std::complex<float>> local_dsp;
+
+        {
+            std::lock_guard<std::mutex> lock(sh_data.sync.rx_mutex);
+            local_raw = sh_data.rx_complex;
+            local_dsp = sh_data.rx_complex_fft_gui;
+        }
+
+        const float *raw_data = reinterpret_cast<const float *>(local_raw.data());
+        const float *dsp_data = reinterpret_cast<const float *>(local_dsp.data());
 
         if (ImGui::Begin("Scatter Raw"))
         {
@@ -105,11 +115,22 @@ void run_gui(sharedData &sh_data)
         }
         ImGui::End();
 
+        std::vector<float> freq_local;
+        std::vector<float> argument_local;
+        std::vector<float> shifted_mag_local;
+
+        {
+            std::lock_guard<std::mutex> lock(sh_data.sync.magnitude_argument_mutex);
+            freq_local = sh_data.frequency_axis;
+            argument_local = sh_data.argument;
+            shifted_mag_local = sh_data.shifted_magnitude;
+        }
+
         if (ImGui::Begin("Argument"))
         {
             if (ImPlot::BeginPlot("Signal Argument", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                ImPlot::PlotLine("Argument", sh_data.frequency_axis.data(), sh_data.argument.data(), sh_data.argument.size());
+                ImPlot::PlotLine("Argument", freq_local.data(), argument_local.data(), argument_local.size());
                 ImPlot::EndPlot();
             }
         }
@@ -119,7 +140,7 @@ void run_gui(sharedData &sh_data)
         {
             if (ImPlot::BeginPlot("Signal Magnitude", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                ImPlot::PlotLine("Magnitude", sh_data.frequency_axis.data(), sh_data.shifted_magnitude.data(), sh_data.shifted_magnitude.size());
+                ImPlot::PlotLine("Magnitude", freq_local.data(), shifted_mag_local.data(), shifted_mag_local.size());
                 ImPlot::EndPlot();
             }
         }

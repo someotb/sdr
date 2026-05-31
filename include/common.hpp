@@ -118,6 +118,7 @@ struct sharedData
     {
         std::mutex tx_mutex;
         std::mutex rx_mutex;
+        std::mutex magnitude_argument_mutex;
     } sync;
 
 
