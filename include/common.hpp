@@ -51,6 +51,7 @@ struct sharedData
     std::vector<std::string> devices;
     std::vector<std::complex<float>> rx_complex;
     std::vector<std::complex<float>> rx_complex_fft_gui;
+    std::vector<std::complex<float>> channel_estimation;
     std::vector<int16_t> tx_buffer;
     std::vector<int16_t> tx_buffer_one_time;
     std::vector<int16_t> tx_buffer_back;
@@ -119,6 +120,7 @@ struct sharedData
         std::mutex tx_mutex;
         std::mutex rx_mutex;
         std::mutex magnitude_argument_mutex;
+        std::mutex channel_estimation_mutex;
     } sync;
 
 
@@ -130,6 +132,7 @@ struct sharedData
             if ((i > 128 / 2 - 28 and i < 128 / 2 + 28) or i == 0)
                 is_zeros[i] = true;
 
+        channel_estimation.resize(128, {0.0f, 0.0f});
         tx_buffer_one_time.resize(rx_mtu * 2, 0);
         tx_buffer.resize(rx_mtu * 2, 0);
         rx_complex.resize(rx_mtu, 0);

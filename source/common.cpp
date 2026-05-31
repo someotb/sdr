@@ -17,7 +17,10 @@ FFT_Context::~FFT_Context()
     fftwf_free(out);
 }
 
-void FFT_Context::fft() { fftwf_execute(plan_forward); }
+void FFT_Context::fft()
+{
+    fftwf_execute(plan_forward);
+}
 
 void FFT_Context::ifft()
 {

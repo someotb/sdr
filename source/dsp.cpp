@@ -31,7 +31,7 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
     int zad_of_idx = 0;
 
     build_pss_zadoff_chu(zad_off_chu_context, sh_data);
-    append_symbol(zad_off_chu_context, zadoff_chu_seq, sh_data.cyclic_prefex, 0);
+    add_cp(zad_off_chu_context, zadoff_chu_seq, sh_data.cyclic_prefex, 0);
     split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
 
     PRBS15 prbs15;
@@ -53,14 +53,14 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
 
             if (sh_data.flags.changed_pss_symbols)
             {
-                append_symbol(zad_off_chu_context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, 0);
+                add_cp(zad_off_chu_context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, 0);
                 start_idx = 2 * ofdm_symbol;
             }
 
             for (int start = start_idx; start <= sh_data.buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
             {
                 build_ofdm_symbol_prbs(prbs15, context, sh_data);
-                append_symbol(context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, start);
+                add_cp(context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, start);
             }
 
             {
@@ -85,14 +85,14 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
 
             if (sh_data.flags.changed_pss_symbols)
             {
-                append_symbol(zad_off_chu_context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, 0);
+                add_cp(zad_off_chu_context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, 0);
                 start_idx = 2 * ofdm_symbol;
             }
 
             for (int start = start_idx; start <= sh_data.buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
             {
                 build_ofdm_symbol(message_bits, context, sh_data, offset);
-                append_symbol(context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, start);
+                add_cp(context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, start);
             }
 
             {

@@ -21,7 +21,7 @@ void build_ofdm_symbol_prbs(PRBS15 &gen, FFT_Context &context, const sharedData 
 
 void build_ofdm_symbol(std::vector<uint8_t> &in, FFT_Context &context, const sharedData &sh_data, int &offset);
 
-void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start);
+void add_cp(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start);
 
 void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &shifted_magnitude, std::vector<float> &argument, FFT_Context &context);
 

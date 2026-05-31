@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <fftw3.h>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -315,7 +316,6 @@ void build_ofdm_symbol_prbs(PRBS15 &gen, FFT_Context &context, const sharedData 
             context.in[k][1] = s.imag();
         }
     }
-
     context.ifft();
 }
 
@@ -344,7 +344,7 @@ void build_ofdm_symbol(std::vector<uint8_t> &in, FFT_Context &context, const sha
     context.ifft();
 }
 
-void append_symbol(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start)
+void add_cp(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, int start)
 {
     float SCALE = 16000.f;
     int N = context.N;
@@ -431,32 +431,17 @@ void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &in_signal
         return;
     out_signal.reserve(in_signal.size() - ofdm_symbol);
 
-    if (sh_data.sync_pos < ofdm_symbol)
-    {
-        int start_idx = sh_data.sync_pos + ofdm_symbol;
-        int rem_samples = in_signal.size() - start_idx;
-        int cnt_samples = rem_samples / ofdm_symbol;
-        int end_idx = start_idx + (cnt_samples * ofdm_symbol);
+    int start_idx = sh_data.sync_pos + ofdm_symbol;
 
-        for (int i = start_idx; i < end_idx; ++i)
-            out_signal.push_back(in_signal[i]);
-    }
-    else
-    {
-        int right_start_idx = sh_data.sync_pos + ofdm_symbol;
-        int rem_samples = in_signal.size() - right_start_idx;
-        int cnt_samples = rem_samples / ofdm_symbol;
-        int end_idx = right_start_idx + (cnt_samples * ofdm_symbol);
+    if (start_idx >= (int)in_signal.size())
+        return;
 
-        for (int i = right_start_idx; i < end_idx; ++i)
-            out_signal.push_back(in_signal[i]);
+    int rem_samples = in_signal.size() - start_idx;
+    int cnt_samples = rem_samples / ofdm_symbol;
+    int end_idx = std::min(start_idx + (cnt_samples * ofdm_symbol), (int)in_signal.size());
 
-        int left_rem_buf_cnt = int(sh_data.sync_pos / ofdm_symbol);
-        int left_start_idx = sh_data.sync_pos - left_rem_buf_cnt * ofdm_symbol;
-
-        for (int i = left_start_idx; i < sh_data.sync_pos; ++i)
-            out_signal.push_back(in_signal[i]);
-    }
+    for (int i = start_idx; i < end_idx; ++i)
+        out_signal.push_back(in_signal[i]);
 }
 
 void cfo_correction(std::vector<std::complex<float>> &in_signal, sharedData &sh_data)
