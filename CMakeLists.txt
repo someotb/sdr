@@ -9,7 +9,7 @@ find_package(OpenGL REQUIRED)
 
 set(IMGUI_DIR ${PROJECT_SOURCE_DIR}/third_party/imgui)
 set(IMPLOT_DIR ${PROJECT_SOURCE_DIR}/third_party/implot)
-set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
+set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/source)
 
 # FFTW3
 find_package(PkgConfig REQUIRED)
