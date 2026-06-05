@@ -98,6 +98,7 @@ struct sharedData
         std::atomic<bool> get_zadoff_pos = false;
         std::atomic<bool> rm_pilots = false;
         std::atomic<bool> debug = false;
+        bool control_panel = false;
         std::atomic<bool> cfo_cor = false;
         std::atomic<bool> equal = false;
         std::atomic<bool> check_bits = false;
