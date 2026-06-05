@@ -476,10 +476,10 @@ void run_gui(sharedData &sh_data)
             if (ImGui::DragFloat("TX Gain", &sh_data.tx_gain, 0.25f, 0.f, 89.f))
                 sh_data.flags.changed_tx_gain = true;
 
-            if (ImGui::InputFloat("RX Frequency", &sh_data.rx_frequency, 1e2, 1e3))
+            if (ImGui::InputFloat("RX Frequency", &sh_data.rx_frequency, 1e3, 1e4))
                 sh_data.flags.changed_rx_freq = true;
 
-            if (ImGui::InputFloat("TX Frequency", &sh_data.tx_frequency, 1e2, 1e3))
+            if (ImGui::InputFloat("TX Frequency", &sh_data.tx_frequency, 1e3, 1e4))
                 sh_data.flags.changed_tx_freq = true;
 
             if (ImGui::SliderInt("RX Bandwidth", &cur_rx_bandwidth, 0, bandwidths.size() - 1,
