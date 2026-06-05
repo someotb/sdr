@@ -306,6 +306,14 @@ void run_gui(sharedData &sh_data)
                 if (ImGui::Button("Reset Error", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data.err_cnt = 0;
 
+                if (ImGui::Button("ReGen Bits", ImVec2(ImGui::GetContentRegionAvail().x / 2, 0.0f)))
+                    sh_data.flags.bits_regen = true;
+
+                ImGui::SameLine();
+
+                if (ImGui::SliderInt("Bits count", &sh_data.bits_cnt, 1, 10000))
+                    sh_data.flags.bits_cnt_change = true;
+
                 ImGui::SeparatorText("ZadOff-Chu");
                 if (ImGui::Button("Loopback Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                     sh_data.flags.get_zadoff_pos_loopback = !sh_data.flags.get_zadoff_pos_loopback;

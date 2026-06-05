@@ -9,15 +9,15 @@
 
 int bits_per_symbol(ModulationType mod);
 
-std::complex<float> map_symbol_prbs(PRBS15 &gen, ModulationType mod);
-
 std::complex<float> map_symbol(std::vector<uint8_t> &in, ModulationType mod, int &offset);
 
-void demap_symbols(std::vector<float> &in, std::vector<float> &out, ModulationType mod);
+void demap_symbols(const std::vector<float> &in, std::vector<float> &out, ModulationType mod);
 
 void build_pss_zadoff_chu(FFT_Context &context, sharedData &sh_data);
 
-void build_ofdm_symbol_prbs(PRBS15 &gen, FFT_Context &context, const sharedData &sh_data);
+void gen_bits(std::vector<uint8_t> &out, const sharedData &sd);
+
+void update_bits(std::vector<uint8_t> &out, const sharedData &sd);
 
 void build_ofdm_symbol(std::vector<uint8_t> &in, FFT_Context &context, const sharedData &sh_data, int &offset);
 

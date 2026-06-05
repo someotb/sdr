@@ -15,13 +15,15 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
     for (int i = 0; i < sh_data.mtu; ++i)
         sh_data.frequency_axis[i] = (i - sh_data.mtu / 2.0) * sh_data.sample_rate / sh_data.mtu;
 
-    int ofdm_symbol = sh_data.subcarrier + sh_data.cyclic_prefex;
+    const int ofdm_symbol = sh_data.subcarrier + sh_data.cyclic_prefex;
     std::vector<int16_t> zadoff_chu_seq((sh_data.subcarrier + sh_data.cyclic_prefex) * 2);
     std::vector<std::complex<float>> rx_complex_remove_pss;
     std::vector<std::complex<float>> rx_complex_cfo;
     std::vector<std::complex<float>> rx_complex_remove_cp;
     std::vector<std::complex<float>> rx_complex_fft;
     std::vector<std::complex<float>> rx_complex_eq;
+    std::vector<uint8_t> bits;
+    bits.reserve(sh_data.bits_cnt);
 
     std::vector<float> signal_re(sh_data.mtu, 0);
     std::vector<float> signal_im(sh_data.mtu, 0);
@@ -34,8 +36,6 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
     add_cp(zad_off_chu_context, zadoff_chu_seq, sh_data.cyclic_prefex, 0);
     split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
 
-    PRBS15 prbs15;
-
     while (!stoken.stop_requested())
     {
         if (!sh_data.flags.changed_cont_time)
@@ -47,7 +47,19 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
         if (sh_data.flags.constant_mode && !sh_data.flags.one_time_mode)
         {
             int start_idx = 0;
-            prbs15.state = 0xACE1;
+            int offset = 0;
+
+            if (sh_data.flags.bits_regen)
+            {
+                gen_bits(bits, sh_data);
+                sh_data.flags.bits_regen = false;
+            }
+
+            if (sh_data.flags.bits_cnt_change)
+            {
+                update_bits(bits, sh_data);
+                sh_data.flags.bits_cnt_change = false;
+            }
 
             calculate_pilots(sh_data);
 
@@ -59,7 +71,7 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
 
             for (int start = start_idx; start <= sh_data.buffer - 2 * ofdm_symbol; start += 2 * ofdm_symbol)
             {
-                build_ofdm_symbol_prbs(prbs15, context, sh_data);
+                build_ofdm_symbol(bits, context, sh_data, offset);
                 add_cp(context, sh_data.tx_buffer_back, sh_data.cyclic_prefex, start);
             }
 

@@ -32,18 +32,6 @@ enum class ModulationType
     QAM256
 };
 
-struct PRBS15
-{
-    uint16_t state = 0xACE1;
-
-    int get_bit()
-    {
-        int new_bit = ((state >> 14) ^ (state >> 13)) & 1;
-        state = (state << 1) | new_bit;
-        return new_bit & 1;
-    }
-};
-
 struct sharedData
 {
     ModulationType modul_type_TX = ModulationType::QPSK;
@@ -85,6 +73,7 @@ struct sharedData
     int zadoff_chu_u = 3;
     int err_cnt = 0;
     int cnt_pilots = 4;
+    int bits_cnt = 3840;
     char input_buffer[256] = "";
 
     struct flags
@@ -113,6 +102,8 @@ struct sharedData
         std::atomic<bool> equal = false;
         std::atomic<bool> check_bits = false;
         std::atomic<bool> tx_buffer_ready = false;
+        std::atomic<bool> bits_cnt_change = true;
+        std::atomic<bool> bits_regen = false;
     } flags;
 
     struct sync
