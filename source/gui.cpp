@@ -65,11 +65,19 @@ void run_gui(sharedData &sh_data)
 
         if (ImGui::Begin("Scatter Raw"))
         {
-            if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
+            if (!local_raw.empty())
             {
-                ImPlotSpec spec;
-                spec.Stride = sizeof(std::complex<float>);
-                ImPlot::PlotScatter("I/Q", raw_data, raw_data + 1, sh_data.rx_complex.size(), spec);
+                if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
+                {
+                    ImPlotSpec spec;
+                    spec.Stride = sizeof(std::complex<float>);
+                    ImPlot::PlotScatter("I/Q", raw_data, raw_data + 1, local_raw.size(), spec);
+                    ImPlot::EndPlot();
+                }
+            }
+            else
+            {
+                ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
                 ImPlot::EndPlot();
             }
         }
@@ -77,11 +85,19 @@ void run_gui(sharedData &sh_data)
 
         if (ImGui::Begin("Scatter FFT"))
         {
-            if (ImPlot::BeginPlot("Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
+            if (!local_dsp.empty())
             {
-                ImPlotSpec spec;
-                spec.Stride = sizeof(std::complex<float>);
-                ImPlot::PlotScatter("I/Q", dsp_data, dsp_data + 1, sh_data.rx_complex_fft_gui.size(), spec);
+                if (ImPlot::BeginPlot("Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
+                {
+                    ImPlotSpec spec;
+                    spec.Stride = sizeof(std::complex<float>);
+                    ImPlot::PlotScatter("I/Q", dsp_data, dsp_data + 1, local_dsp.size(), spec);
+                    ImPlot::EndPlot();
+                }
+            }
+            else
+            {
+                ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
                 ImPlot::EndPlot();
             }
         }
@@ -89,13 +105,21 @@ void run_gui(sharedData &sh_data)
 
         if (ImGui::Begin("Plot Raw"))
         {
-            if (ImPlot::BeginPlot("Raw I/Q samples", ImVec2(ImGui::GetContentRegionAvail())))
+            if (!local_raw.empty())
             {
-                int count = sh_data.rx_complex.size();
-                ImPlotSpec spec;
-                spec.Stride = sizeof(std::complex<float>);
-                ImPlot::PlotLine("I", raw_data, count, 1.0, 0.0, spec);
-                ImPlot::PlotLine("Q", raw_data + 1, count, 1.0, 0.0, spec);
+                if (ImPlot::BeginPlot("Raw I/Q samples", ImVec2(ImGui::GetContentRegionAvail())))
+                {
+                    int count = local_raw.size();
+                    ImPlotSpec spec;
+                    spec.Stride = sizeof(std::complex<float>);
+                    ImPlot::PlotLine("I", raw_data, count, 1.0, 0.0, spec);
+                    ImPlot::PlotLine("Q", raw_data + 1, count, 1.0, 0.0, spec);
+                    ImPlot::EndPlot();
+                }
+            }
+            else
+            {
+                ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
                 ImPlot::EndPlot();
             }
         }
@@ -103,13 +127,21 @@ void run_gui(sharedData &sh_data)
 
         if (ImGui::Begin("Plot FFT"))
         {
-            if (ImPlot::BeginPlot("I/Q Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
+            if (!local_dsp.empty())
             {
-                int count = sh_data.rx_complex_fft_gui.size();
-                ImPlotSpec spec;
-                spec.Stride = sizeof(std::complex<float>);
-                ImPlot::PlotLine("I", dsp_data, count, 1.0, 0, spec);
-                ImPlot::PlotLine("Q", dsp_data + 1, count, 1.0, 0, spec);
+                if (ImPlot::BeginPlot("I/Q Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
+                {
+                    int count = local_dsp.size();
+                    ImPlotSpec spec;
+                    spec.Stride = sizeof(std::complex<float>);
+                    ImPlot::PlotLine("I", dsp_data, count, 1.0, 0.0, spec);
+                    ImPlot::PlotLine("Q", dsp_data + 1, count, 1.0, 0.0, spec);
+                    ImPlot::EndPlot();
+                }
+            }
+            else
+            {
+                ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
                 ImPlot::EndPlot();
             }
         }
@@ -194,6 +226,24 @@ void run_gui(sharedData &sh_data)
                     if (!sh_data.zadoff_corr_arr.empty())
                     {
                         ImPlot::PlotLine("Zadoff-Chu", sh_data.zadoff_corr_arr.data(), sh_data.zadoff_corr_arr.size());
+                        ImPlot::EndPlot();
+                    }
+                    else
+                    {
+                        ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                        ImPlot::EndPlot();
+                    }
+                }
+            }
+            ImGui::End();
+
+            if (ImGui::Begin("Zadoff-Chu Idx"))
+            {
+                if (ImPlot::BeginPlot("Zadoff-Chu index", ImVec2(ImGui::GetContentRegionAvail())))
+                {
+                    if (!sh_data.zd_idx.empty())
+                    {
+                        ImPlot::PlotLine("Zadoff-Chu idx", sh_data.zd_idx.data(), sh_data.zd_idx.size());
                         ImPlot::EndPlot();
                     }
                     else

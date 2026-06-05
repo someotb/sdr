@@ -128,7 +128,11 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
             split_to_float(rx_local.data(), signal_re.data(), signal_im.data(), signal_re.size());
             zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(),
                                         sh_data.zadoff_corr_arr.data());
-            sh_data.sync_pos = zad_of_idx;
+
+            if (zad_of_idx > sh_data.mtu)
+                zad_of_idx = sh_data.mtu;
+
+            sh_data.sync_pos = zad_of_idx - sh_data.sync_offset;
             sh_data.flags.get_zadoff_pos_loopback = false;
         }
 
@@ -137,9 +141,16 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
             split_to_float(rx_local.data(), signal_re.data(), signal_im.data(), signal_re.size());
             zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(),
                                         sh_data.zadoff_corr_arr.data());
-            if (zad_of_idx > 1920)
-                zad_of_idx = 1920;
+            if (zad_of_idx > sh_data.mtu)
+                zad_of_idx = sh_data.mtu;
             sh_data.sync_pos = zad_of_idx - sh_data.sync_offset;
+            if ((int)sh_data.zd_idx.size() < sh_data.mtu)
+                sh_data.zd_idx.push_back(zad_of_idx);
+            else
+            {
+                sh_data.zd_idx.erase(sh_data.zd_idx.begin());
+                sh_data.zd_idx.push_back(zad_of_idx);
+            }
         }
 
         remove_pss(sh_data, rx_local, rx_complex_remove_pss);

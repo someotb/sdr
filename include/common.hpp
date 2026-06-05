@@ -54,6 +54,7 @@ struct sharedData
     std::vector<bool> is_pilot;
     std::vector<bool> is_zeros;
     std::vector<int> pilot_idxs;
+    std::vector<int> zd_idx;
     std::string message = "Hello World!";
     std::string dec_message = "Hello World!";
 
