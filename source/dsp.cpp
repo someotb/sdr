@@ -166,9 +166,6 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
         if (sh_data.flags.one_time_mode)
             sh_data.dec_message = bits_to_str(sh_data.demaped_bits);
 
-        if (sh_data.flags.check_bits)
-            check_demapping(sh_data.demaped_bits, sh_data);
-
         {
             std::lock_guard<std::mutex> lock(sh_data.sync.rx_mutex);
             sh_data.rx_complex_fft_gui = sh_data.flags.equal ? rx_complex_eq : rx_complex_fft;

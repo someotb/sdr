@@ -101,7 +101,6 @@ struct sharedData
         bool control_panel = false;
         std::atomic<bool> cfo_cor = false;
         std::atomic<bool> equal = false;
-        std::atomic<bool> check_bits = false;
         std::atomic<bool> tx_buffer_ready = false;
         std::atomic<bool> bits_cnt_change = true;
         std::atomic<bool> bits_regen = false;

@@ -548,46 +548,6 @@ void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, si
     }
 }
 
-void check_demapping(const std::vector<float> &in_signal, sharedData &sh_data)
-{
-//     sh_data.bits.clear();
-//     sh_data.bits.reserve(in_signal.size());
-
-//     sh_data.err_cnt = 0;
-
-//     if (sh_data.sync_pos < 0)
-//         return;
-
-//     int ofdm_symbol_len = sh_data.subcarrier + sh_data.cyclic_prefex;
-//     int right_samples = sh_data.rx_complex.size() - (sh_data.sync_pos + ofdm_symbol_len);
-//     int right_symbols = std::max(0, right_samples / ofdm_symbol_len);
-
-//     if (right_symbols == 0)
-//         return;
-
-//     int bps = bits_per_symbol(sh_data.modul_type_TX);
-
-//     PRBS15 ref_gen;
-//     ref_gen.state = 0xACE1;
-
-//     for (int s = 0; s < right_symbols; ++s)
-//     {
-//         for (int k = 0; k < sh_data.subcarrier; ++k)
-//         {
-//             if (sh_data.is_zeros[k] || sh_data.is_pilot[k])
-//                 continue;
-
-//             for (int b = 0; b < bps; ++b)
-//                 sh_data.bits.push_back((float)ref_gen.get_bit());
-//         }
-//     }
-
-//     size_t len = std::min(sh_data.bits.size(), in_signal.size());
-//     for (size_t i = 0; i < len; ++i)
-//         if (sh_data.bits[i] != in_signal[i])
-//             sh_data.err_cnt++;
-}
-
 std::vector<uint8_t> str_to_bits(const std::string &in)
 {
     std::vector<uint8_t> bits;

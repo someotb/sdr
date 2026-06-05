@@ -323,7 +323,6 @@ void run_gui(sharedData &sh_data)
             const char *zadoff_chu = sh_data.flags.get_zadoff_pos ? "Direct Mode [ON]" : "Direct Mode [OFF]";
             const char *cfo_correct = sh_data.flags.cfo_cor ? "CFO Correction [ON]" : "CFO Correction [OFF]";
             const char *equal_mode = sh_data.flags.equal ? "Equalization [ON]" : "Equalization [OFF]";
-            const char *check_bit = sh_data.flags.check_bits ? "Bits Check [ON]" : "Bits Check [OFF]";
             const char *modulation_type = nullptr;
 
             if (ImGui::Button(label_time, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
@@ -334,9 +333,6 @@ void run_gui(sharedData &sh_data)
 
             if (ImGui::Button(pss_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                 sh_data.flags.changed_pss_symbols = !sh_data.flags.changed_pss_symbols;
-
-            if (ImGui::Button(check_bit, ImVec2(ImGui::GetContentRegionAvail().x / 2, 0.f)))
-                sh_data.flags.check_bits = !sh_data.flags.check_bits;
 
             ImGui::SameLine();
 
@@ -443,7 +439,6 @@ void run_gui(sharedData &sh_data)
                 sh_data.tx_gain = 0.0f;
                 sh_data.flags.cfo_cor = !sh_data.flags.cfo_cor;
                 sh_data.flags.equal = !sh_data.flags.equal;
-                sh_data.flags.check_bits = !sh_data.flags.check_bits;
                 sh_data.flags.debug = !sh_data.flags.debug;
             }
 
@@ -459,7 +454,6 @@ void run_gui(sharedData &sh_data)
                 sh_data.tx_gain = 89.0f;
                 sh_data.flags.cfo_cor = !sh_data.flags.cfo_cor;
                 sh_data.flags.equal = !sh_data.flags.equal;
-                sh_data.flags.check_bits = !sh_data.flags.check_bits;
                 sh_data.flags.debug = !sh_data.flags.debug;
             }
 

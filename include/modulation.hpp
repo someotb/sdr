@@ -42,8 +42,6 @@ void split_to_float(const std::complex<float> *__restrict src, float *__restrict
 
 void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, size_t num_samples);
 
-void check_demapping(const std::vector<float> &in_signal, sharedData &sh_data);
-
 std::vector<uint8_t> str_to_bits(const std::string &in);
 
 std::string bits_to_str(const std::vector<float> &bits);
