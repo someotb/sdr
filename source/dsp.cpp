@@ -22,6 +22,7 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
     std::vector<std::complex<float>> rx_complex_remove_cp;
     std::vector<std::complex<float>> rx_complex_fft;
     std::vector<std::complex<float>> rx_complex_eq;
+    std::vector<std::complex<float>> rx_local;
     std::vector<uint8_t> bits;
     bits.reserve(sh_data.bits_cnt);
 
@@ -120,7 +121,7 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
         std::vector<std::complex<float>> rx_local;
         {
             std::lock_guard<std::mutex> lock(sh_data.sync.rx_mutex);
-            rx_local = sh_data.rx_complex;
+            rx_local.assign(sh_data.rx_complex.begin(), sh_data.rx_complex.end());
         }
 
         if (sh_data.flags.get_zadoff_pos_loopback)

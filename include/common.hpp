@@ -84,7 +84,7 @@ struct sharedData
         std::atomic<bool> changed_send = false;
         std::atomic<bool> changed_rx_gain = false;
         std::atomic<bool> changed_tx_gain = false;
-        bool rx_gain_mode = false;
+        std::atomic<bool> rx_gain_mode = false;
         bool show_input_window = false;
         std::atomic<bool> changed_rx_gain_mode = false;
         std::atomic<bool> changed_rx_freq = false;

@@ -65,9 +65,9 @@ void run_gui(sharedData &sh_data)
 
         if (ImGui::Begin("Scatter Raw"))
         {
-            if (!local_raw.empty())
+            if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                if (ImPlot::BeginPlot("Raw Samples", ImVec2(ImGui::GetContentRegionAvail())))
+                if (!local_raw.empty())
                 {
                     ImPlotSpec spec;
                     spec.Stride = sizeof(std::complex<float>);
@@ -85,9 +85,9 @@ void run_gui(sharedData &sh_data)
 
         if (ImGui::Begin("Scatter FFT"))
         {
-            if (!local_dsp.empty())
+            if (ImPlot::BeginPlot("Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                if (ImPlot::BeginPlot("Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
+                if (!local_dsp.empty())
                 {
                     ImPlotSpec spec;
                     spec.Stride = sizeof(std::complex<float>);
@@ -514,8 +514,12 @@ void run_gui(sharedData &sh_data)
                 sh_data.flags.changed_rx_gain_mode = true;
             }
             ImGui::SameLine();
-            if (ImGui::Checkbox("AGC", &sh_data.flags.rx_gain_mode))
+            bool rx_gain_mode = sh_data.flags.rx_gain_mode;
+            if (ImGui::Checkbox("AGC", &rx_gain_mode))
+            {
+                sh_data.flags.rx_gain_mode = rx_gain_mode;
                 sh_data.flags.changed_rx_gain_mode = true;
+            }
 
             if (ImGui::DragFloat("TX Gain", &sh_data.tx_gain, 0.25f, 0.f, 89.f))
                 sh_data.flags.changed_tx_gain = true;

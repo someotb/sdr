@@ -25,8 +25,8 @@ void add_cp(FFT_Context &context, std::vector<int16_t> &tx, int cyclic_prefex, i
 
 void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &shifted_magnitude, std::vector<float> &argument, FFT_Context &context);
 
-int zadoff_sync(const float *__restrict signal_re, const float *__restrict signal_im, size_t signal_len, const float *__restrict zc_re,
-                const float *__restrict zc_im, size_t zc_len, float *__restrict out_corr);
+int zadoff_sync(const float *signal_re, const float *signal_im, size_t signal_len, const float *zc_re,
+                const float *zc_im, size_t zc_len, float *out_corr);
 
 void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal);
 
@@ -38,7 +38,7 @@ void decode(std::vector<std::complex<float>> &in_signal, std::vector<std::comple
 
 void equalization(std::vector<std::complex<float>> &in_signal, sharedData &sh_data, std::vector<std::complex<float>> &out_signal);
 
-void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n);
+void split_to_float(const std::complex<float> *src, float *dst_re, float *dst_im, size_t n);
 
 void split_int16_t_to_float(const int16_t *src, float *dst_re, float *dst_im, size_t num_samples);
 

@@ -332,8 +332,8 @@ void spectrum(std::vector<std::complex<float>> &in_signal, std::vector<float> &s
     }
 }
 
-int zadoff_sync(const float *__restrict signal_re, const float *__restrict signal_im, size_t signal_len, const float *__restrict zc_re,
-                const float *__restrict zc_im, size_t zc_len, float *__restrict out_corr)
+int zadoff_sync(const float *signal_re, const float *signal_im, size_t signal_len, const float *zc_re,
+                const float *zc_im, size_t zc_len, float *out_corr)
 {
     float max_norm = -1.f;
     int best_idx = 0;
@@ -528,7 +528,7 @@ void equalization(std::vector<std::complex<float>> &in_signal, sharedData &sh_da
     }
 }
 
-void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n)
+void split_to_float(const std::complex<float> *src, float *dst_re, float *dst_im, size_t n)
 {
     const float *raw_src = reinterpret_cast<const float *>(src);
 
