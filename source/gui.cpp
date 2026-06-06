@@ -74,11 +74,11 @@ void run_gui(sharedData &sh_data)
                     ImPlot::PlotScatter("I/Q", raw_data, raw_data + 1, local_raw.size(), spec);
                     ImPlot::EndPlot();
                 }
-            }
-            else
-            {
-                ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
-                ImPlot::EndPlot();
+                else
+                {
+                    ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                    ImPlot::EndPlot();
+                }
             }
         }
         ImGui::End();
@@ -94,20 +94,20 @@ void run_gui(sharedData &sh_data)
                     ImPlot::PlotScatter("I/Q", dsp_data, dsp_data + 1, local_dsp.size(), spec);
                     ImPlot::EndPlot();
                 }
-            }
-            else
-            {
-                ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
-                ImPlot::EndPlot();
+                else
+                {
+                    ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                    ImPlot::EndPlot();
+                }
             }
         }
         ImGui::End();
 
         if (ImGui::Begin("Plot Raw"))
         {
-            if (!local_raw.empty())
+            if (ImPlot::BeginPlot("Raw I/Q samples", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                if (ImPlot::BeginPlot("Raw I/Q samples", ImVec2(ImGui::GetContentRegionAvail())))
+                if (!local_raw.empty())
                 {
                     int count = local_raw.size();
                     ImPlotSpec spec;
@@ -116,20 +116,20 @@ void run_gui(sharedData &sh_data)
                     ImPlot::PlotLine("Q", raw_data + 1, count, 1.0, 0.0, spec);
                     ImPlot::EndPlot();
                 }
-            }
-            else
-            {
-                ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
-                ImPlot::EndPlot();
+                else
+                {
+                    ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                    ImPlot::EndPlot();
+                }
             }
         }
         ImGui::End();
 
         if (ImGui::Begin("Plot FFT"))
         {
-            if (!local_dsp.empty())
+            if (ImPlot::BeginPlot("I/Q Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
             {
-                if (ImPlot::BeginPlot("I/Q Samples After FFT", ImVec2(ImGui::GetContentRegionAvail())))
+                if (!local_dsp.empty())
                 {
                     int count = local_dsp.size();
                     ImPlotSpec spec;
@@ -138,11 +138,11 @@ void run_gui(sharedData &sh_data)
                     ImPlot::PlotLine("Q", dsp_data + 1, count, 1.0, 0.0, spec);
                     ImPlot::EndPlot();
                 }
-            }
-            else
-            {
-                ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
-                ImPlot::EndPlot();
+                else
+                {
+                    ImPlot::Annotation(0.5, 0.5, ImVec4(1, 0, 0, 1), ImVec2(0, 0), true, "No Data");
+                    ImPlot::EndPlot();
+                }
             }
         }
         ImGui::End();
