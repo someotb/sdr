@@ -29,13 +29,13 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
     std::vector<float> signal_re(sh_data.mtu, 0);
     std::vector<float> signal_im(sh_data.mtu, 0);
 
-    std::vector<float> zc_re(sh_data.subcarrier + sh_data.cyclic_prefex, 0);
-    std::vector<float> zc_im(sh_data.subcarrier + sh_data.cyclic_prefex, 0);
+    std::vector<float> zc_re(sh_data.subcarrier, 0);
+    std::vector<float> zc_im(sh_data.subcarrier, 0);
     int zad_of_idx = 0;
 
     build_pss_zadoff_chu(zad_off_chu_context, sh_data);
     add_cp(zad_off_chu_context, zadoff_chu_seq, sh_data.cyclic_prefex, 0);
-    split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), zc_re.size());
+    split_int16_t_to_float(zadoff_chu_seq.data() + sh_data.cyclic_prefex * 2, zc_re.data(), zc_im.data(), sh_data.subcarrier);
 
     while (!stoken.stop_requested())
     {
@@ -114,11 +114,7 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
             }
         }
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto start = std::chrono::steady_clock::now();
-        std::atomic_signal_fence(std::memory_order_seq_cst);
-
-        std::vector<std::complex<float>> rx_local;
         {
             std::lock_guard<std::mutex> lock(sh_data.sync.rx_mutex);
             rx_local.assign(sh_data.rx_complex.begin(), sh_data.rx_complex.end());
@@ -144,7 +140,7 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
                                         sh_data.zadoff_corr_arr.data());
             if (zad_of_idx > sh_data.mtu)
                 zad_of_idx = sh_data.mtu;
-            sh_data.sync_pos = zad_of_idx - sh_data.sync_offset;
+
             if ((int)sh_data.zd_idx.size() < sh_data.mtu)
                 sh_data.zd_idx.push_back(zad_of_idx);
             else
@@ -152,6 +148,9 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
                 sh_data.zd_idx.erase(sh_data.zd_idx.begin());
                 sh_data.zd_idx.push_back(zad_of_idx);
             }
+
+            sh_data.sync_pos = zad_of_idx + sh_data.sync_offset;
+
         }
 
         remove_pss(sh_data, rx_local, rx_complex_remove_pss);
@@ -188,10 +187,7 @@ void run_dsp(std::stop_token stoken, sharedData &sh_data)
             spectrum(rx_local, sh_data.shifted_magnitude, sh_data.argument, context_spectre);
         }
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto end = std::chrono::steady_clock::now();
-        std::atomic_signal_fence(std::memory_order_seq_cst);
-
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
         if (sh_data.flags.debug)

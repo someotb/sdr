@@ -365,21 +365,21 @@ int zadoff_sync(const float *signal_re, const float *signal_im, size_t signal_le
 
 void remove_pss(sharedData &sh_data, std::vector<std::complex<float>> &in_signal, std::vector<std::complex<float>> &out_signal)
 {
-    int ofdm_symbol = sh_data.subcarrier + sh_data.cyclic_prefex;
+    int pss_symbol = sh_data.subcarrier;
     out_signal.clear();
 
-    if (in_signal.size() <= static_cast<size_t>(ofdm_symbol))
+    if (in_signal.size() <= static_cast<size_t>(pss_symbol))
         return;
-    out_signal.reserve(in_signal.size() - ofdm_symbol);
+    out_signal.reserve(in_signal.size() - pss_symbol);
 
-    int start_idx = sh_data.sync_pos + ofdm_symbol;
+    int start_idx = sh_data.sync_pos + pss_symbol;
 
     if (start_idx >= (int)in_signal.size())
         return;
 
     int rem_samples = in_signal.size() - start_idx;
-    int cnt_samples = rem_samples / ofdm_symbol;
-    int end_idx = std::min(start_idx + (cnt_samples * ofdm_symbol), (int)in_signal.size());
+    int cnt_samples = rem_samples / pss_symbol;
+    int end_idx = std::min(start_idx + (cnt_samples * pss_symbol), (int)in_signal.size());
 
     for (int i = start_idx; i < end_idx; ++i)
         out_signal.push_back(in_signal[i]);
