@@ -33,7 +33,10 @@ void run_gui(sharedData &sd)
     ImGui::CreateContext();
     ImPlot::CreateContext();
     ImGui::StyleColorsDark();
-    ImGuiIO& io = ImGui::GetIO();
+
+    static std::string ini_path = "../config/imgui.ini";
+    ImGuiIO &io = ImGui::GetIO();
+    io.IniFilename = ini_path.c_str();
 
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;

@@ -34,11 +34,10 @@ void run_dsp(std::stop_token stoken, sharedData &sd)
     int zad_of_idx = 0;
 
     std::vector<int16_t> tx_buffer_back;
-    tx_buffer_back.reserve(sd.buffer);
 
     build_pss_zadoff_chu(zad_off_chu_context, sd);
     add_cp(zad_off_chu_context, zadoff_chu_seq, sd.cyclic_prefex, 0);
-    split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), sd.subcarrier);
+    split_int16_t_to_float(zadoff_chu_seq.data(), zc_re.data(), zc_im.data(), ofdm_symbol);
 
     while (!stoken.stop_requested())
     {
