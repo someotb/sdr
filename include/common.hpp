@@ -42,7 +42,6 @@ struct sharedData
     std::vector<std::complex<float>> channel_estimation;
     std::vector<int16_t> tx_buffer;
     std::vector<int16_t> tx_buffer_one_time;
-    std::vector<int16_t> tx_buffer_back;
     std::vector<float> demaped_bits;
     std::vector<float> bits;
     std::vector<float> shifted_magnitude;
@@ -105,6 +104,7 @@ struct sharedData
         std::atomic<bool> tx_buffer_ready = false;
         std::atomic<bool> bits_cnt_change = true;
         std::atomic<bool> bits_regen = false;
+        std::atomic<bool> pilots_change = true;
     } flags;
 
     struct sync
@@ -133,6 +133,5 @@ struct sharedData
         shifted_magnitude.resize(rx_mtu, 0);
         argument.resize(rx_mtu, 0);
         frequency_axis.resize(rx_mtu, 0);
-        tx_buffer_back.resize(rx_mtu * 2, 0);
     }
 };

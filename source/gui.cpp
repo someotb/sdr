@@ -8,7 +8,7 @@
 #include <mutex>
 #include <vector>
 
-void run_gui(sharedData &sh_data)
+void run_gui(sharedData &sd)
 {
     std::vector<float> bandwidths = {2e5f, 1e6f, 2e6f, 3e6f, 4e6f, 5e6f, 6e6f, 7e6f, 8e6f, 9e6f, 10e6f};
     int cur_rx_bandwidth = 1;
@@ -55,9 +55,9 @@ void run_gui(sharedData &sh_data)
         std::vector<std::complex<float>> local_dsp;
 
         {
-            std::lock_guard<std::mutex> lock(sh_data.sync.rx_mutex);
-            local_raw = sh_data.rx_complex;
-            local_dsp = sh_data.rx_complex_fft_gui;
+            std::lock_guard<std::mutex> lock(sd.sync.rx_mutex);
+            local_raw = sd.rx_complex;
+            local_dsp = sd.rx_complex_fft_gui;
         }
 
         const float *raw_data = reinterpret_cast<const float *>(local_raw.data());
@@ -152,10 +152,10 @@ void run_gui(sharedData &sh_data)
         std::vector<float> shifted_mag_local;
 
         {
-            std::lock_guard<std::mutex> lock(sh_data.sync.magnitude_argument_mutex);
-            freq_local = sh_data.frequency_axis;
-            argument_local = sh_data.argument;
-            shifted_mag_local = sh_data.shifted_magnitude;
+            std::lock_guard<std::mutex> lock(sd.sync.magnitude_argument_mutex);
+            freq_local = sd.frequency_axis;
+            argument_local = sd.argument;
+            shifted_mag_local = sd.shifted_magnitude;
         }
 
         if (ImGui::Begin("Argument"))
@@ -180,8 +180,8 @@ void run_gui(sharedData &sh_data)
 
         std::vector<std::complex<float>> chan_estim_local;
         {
-            std::lock_guard<std::mutex> lock(sh_data.sync.channel_estimation_mutex);
-            chan_estim_local = sh_data.channel_estimation;
+            std::lock_guard<std::mutex> lock(sd.sync.channel_estimation_mutex);
+            chan_estim_local = sd.channel_estimation;
         }
 
         const float* chan_estim = reinterpret_cast<const float*>(chan_estim_local.data());
@@ -199,15 +199,15 @@ void run_gui(sharedData &sh_data)
         }
         ImGui::End();
 
-        if (sh_data.flags.debug)
+        if (sd.flags.debug)
         {
             if (ImGui::Begin("Latency"))
             {
                 if (ImPlot::BeginPlot("Latency", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    if (!sh_data.milisecs.empty())
+                    if (!sd.milisecs.empty())
                     {
-                        ImPlot::PlotLine("Latency", sh_data.milisecs.data(), sh_data.milisecs.size());
+                        ImPlot::PlotLine("Latency", sd.milisecs.data(), sd.milisecs.size());
                         ImPlot::EndPlot();
                     }
                     else
@@ -223,9 +223,9 @@ void run_gui(sharedData &sh_data)
             {
                 if (ImPlot::BeginPlot("Zadoff-Chu Correlation Array", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    if (!sh_data.zadoff_corr_arr.empty())
+                    if (!sd.zadoff_corr_arr.empty())
                     {
-                        ImPlot::PlotLine("Zadoff-Chu", sh_data.zadoff_corr_arr.data(), sh_data.zadoff_corr_arr.size());
+                        ImPlot::PlotLine("Zadoff-Chu", sd.zadoff_corr_arr.data(), sd.zadoff_corr_arr.size());
                         ImPlot::EndPlot();
                     }
                     else
@@ -241,9 +241,9 @@ void run_gui(sharedData &sh_data)
             {
                 if (ImPlot::BeginPlot("Zadoff-Chu index", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    if (!sh_data.zd_idx.empty())
+                    if (!sd.zd_idx.empty())
                     {
-                        ImPlot::PlotLine("Zadoff-Chu idx", sh_data.zd_idx.data(), sh_data.zd_idx.size());
+                        ImPlot::PlotLine("Zadoff-Chu idx", sd.zd_idx.data(), sd.zd_idx.size());
                         ImPlot::EndPlot();
                     }
                     else
@@ -259,9 +259,9 @@ void run_gui(sharedData &sh_data)
             {
                 if (ImPlot::BeginPlot("CFO Correction Array", ImVec2(ImGui::GetContentRegionAvail())))
                 {
-                    if (!sh_data.cfo_offset.empty())
+                    if (!sd.cfo_offset.empty())
                     {
-                        ImPlot::PlotLine("CFO", sh_data.cfo_offset.data(), sh_data.cfo_offset.size());
+                        ImPlot::PlotLine("CFO", sd.cfo_offset.data(), sd.cfo_offset.size());
                         ImPlot::EndPlot();
                     }
                     else
@@ -275,15 +275,15 @@ void run_gui(sharedData &sh_data)
 
             if (ImGui::Begin("Demapped Bits"))
             {
-                if (sh_data.flags.constant_mode)
+                if (sd.flags.constant_mode)
                 {
-                    ImGui::Text("Error Counter: %d", sh_data.err_cnt);
+                    ImGui::Text("Error Counter: %d", sd.err_cnt);
                     if (ImPlot::BeginPlot("Demapped Bits vs Sended", ImVec2(ImGui::GetContentRegionAvail())))
                     {
-                        if (!sh_data.demaped_bits.empty())
+                        if (!sd.demaped_bits.empty())
                         {
-                            ImPlot::PlotLine("RX", sh_data.demaped_bits.data(), sh_data.demaped_bits.size());
-                            ImPlot::PlotLine("TX", sh_data.bits.data(), sh_data.bits.size());
+                            ImPlot::PlotLine("RX", sd.demaped_bits.data(), sd.demaped_bits.size());
+                            ImPlot::PlotLine("TX", sd.bits.data(), sd.bits.size());
                             ImPlot::EndPlot();
                         }
                         else
@@ -294,13 +294,13 @@ void run_gui(sharedData &sh_data)
                     }
                 }
 
-                if (sh_data.flags.one_time_mode)
+                if (sd.flags.one_time_mode)
                 {
                     if (ImPlot::BeginPlot("Demapped Bits", ImVec2(ImGui::GetContentRegionAvail())))
                     {
-                        if (!sh_data.demaped_bits.empty())
+                        if (!sd.demaped_bits.empty())
                         {
-                            ImPlot::PlotLine("RX", sh_data.demaped_bits.data(), sh_data.demaped_bits.size());
+                            ImPlot::PlotLine("RX", sd.demaped_bits.data(), sd.demaped_bits.size());
                             ImPlot::EndPlot();
                         }
                         else
@@ -313,12 +313,12 @@ void run_gui(sharedData &sh_data)
             }
             ImGui::End();
 
-            if (sh_data.flags.one_time_mode)
+            if (sd.flags.one_time_mode)
             {
                 if (ImGui::Begin("Decoded Text"))
                 {
                     ImGui::Text("Decoded text:");
-                    ImGui::TextWrapped("%s", sh_data.dec_message.c_str());
+                    ImGui::TextWrapped("%s", sd.dec_message.c_str());
                 }
                 ImGui::End();
             }
@@ -328,29 +328,29 @@ void run_gui(sharedData &sh_data)
         {
             if (ImGui::BeginMenu("Control Panel"))
             {
-                if (ImGui::MenuItem("Open control panel", nullptr, sh_data.flags.control_panel))
-                    sh_data.flags.control_panel = !sh_data.flags.control_panel;
+                if (ImGui::MenuItem("Open control panel", nullptr, sd.flags.control_panel))
+                    sd.flags.control_panel = !sd.flags.control_panel;
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("Debug"))
             {
-                if (ImGui::MenuItem("Debug Mode", nullptr, sh_data.flags.debug))
-                    sh_data.flags.debug = !sh_data.flags.debug;
+                if (ImGui::MenuItem("Debug Mode", nullptr, sd.flags.debug))
+                    sd.flags.debug = !sd.flags.debug;
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("Send Mode"))
             {
-                if (ImGui::MenuItem("Constant Mode", nullptr, sh_data.flags.constant_mode))
+                if (ImGui::MenuItem("Constant Mode", nullptr, sd.flags.constant_mode))
                 {
-                    sh_data.flags.constant_mode = true;
-                    sh_data.flags.one_time_mode = false;
+                    sd.flags.constant_mode = true;
+                    sd.flags.one_time_mode = false;
                 }
-                if (ImGui::MenuItem("One-Time Mode", nullptr, sh_data.flags.one_time_mode))
+                if (ImGui::MenuItem("One-Time Mode", nullptr, sd.flags.one_time_mode))
                 {
-                    sh_data.flags.one_time_mode = true;
-                    sh_data.flags.constant_mode = false;
+                    sd.flags.one_time_mode = true;
+                    sd.flags.constant_mode = false;
                 }
                 ImGui::EndMenu();
             }
@@ -362,57 +362,57 @@ void run_gui(sharedData &sh_data)
             ImGui::EndMainMenuBar();
         }
 
-        if (sh_data.flags.control_panel)
+        if (sd.flags.control_panel)
         {
-            ImGui::Begin("Control Panel", &sh_data.flags.control_panel);
+            ImGui::Begin("Control Panel", &sd.flags.control_panel);
             ImGui::SeparatorText("Processing Blocks");
 
-            const char *label_time = sh_data.flags.changed_cont_time ? "Programm | Running" : "Programm | Stopped";
-            const char *sdr_mode = sh_data.flags.changed_send ? "SDR Mode | Transmission" : "SDR Mode | Receiving";
-            const char *pss_mode = sh_data.flags.changed_pss_symbols ? "PSS Symbol [ON]" : "PSS Symbol [OFF]";
-            const char *zadoff_chu = sh_data.flags.get_zadoff_pos ? "Direct Mode [ON]" : "Direct Mode [OFF]";
-            const char *cfo_correct = sh_data.flags.cfo_cor ? "CFO Correction [ON]" : "CFO Correction [OFF]";
-            const char *equal_mode = sh_data.flags.equal ? "Equalization [ON]" : "Equalization [OFF]";
+            const char *label_time = sd.flags.changed_cont_time ? "Programm | Running" : "Programm | Stopped";
+            const char *sdr_mode = sd.flags.changed_send ? "SDR Mode | Transmission" : "SDR Mode | Receiving";
+            const char *pss_mode = sd.flags.changed_pss_symbols ? "PSS Symbol [ON]" : "PSS Symbol [OFF]";
+            const char *zadoff_chu = sd.flags.get_zadoff_pos ? "Direct Mode [ON]" : "Direct Mode [OFF]";
+            const char *cfo_correct = sd.flags.cfo_cor ? "CFO Correction [ON]" : "CFO Correction [OFF]";
+            const char *equal_mode = sd.flags.equal ? "Equalization [ON]" : "Equalization [OFF]";
             const char *modulation_type = nullptr;
 
             if (ImGui::Button(label_time, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sh_data.flags.changed_cont_time = !sh_data.flags.changed_cont_time;
+                sd.flags.changed_cont_time = !sd.flags.changed_cont_time;
 
             if (ImGui::Button(sdr_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sh_data.flags.changed_send = !sh_data.flags.changed_send;
+                sd.flags.changed_send = !sd.flags.changed_send;
 
             if (ImGui::Button(pss_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sh_data.flags.changed_pss_symbols = !sh_data.flags.changed_pss_symbols;
+                sd.flags.changed_pss_symbols = !sd.flags.changed_pss_symbols;
 
             ImGui::SameLine();
 
             if (ImGui::Button("Reset Error", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sh_data.err_cnt = 0;
+                sd.err_cnt = 0;
 
             if (ImGui::Button("ReGen Bits", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
-                sh_data.flags.bits_regen = true;
+                sd.flags.bits_regen = true;
 
-            if (ImGui::SliderInt("Bits count", &sh_data.bits_cnt, 1, 10000))
-                sh_data.flags.bits_cnt_change = true;
+            if (ImGui::SliderInt("Bits count", &sd.bits_cnt, 1, 10000))
+                sd.flags.bits_cnt_change = true;
 
             ImGui::SeparatorText("ZadOff-Chu");
             if (ImGui::Button("Loopback Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sh_data.flags.get_zadoff_pos_loopback = !sh_data.flags.get_zadoff_pos_loopback;
+                sd.flags.get_zadoff_pos_loopback = !sd.flags.get_zadoff_pos_loopback;
             if (ImGui::Button(zadoff_chu, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sh_data.flags.get_zadoff_pos = !sh_data.flags.get_zadoff_pos;
-            ImGui::InputInt("Sync Pos", &sh_data.sync_pos, 1, 1e1);
-            ImGui::InputInt("Sync Offset", &sh_data.sync_offset, 1, 1e1);
-            ImGui::InputInt("U Value ", &sh_data.zadoff_chu_u, 1, 10);
+                sd.flags.get_zadoff_pos = !sd.flags.get_zadoff_pos;
+            ImGui::InputInt("Sync Pos", &sd.sync_pos, 1, 1e1);
+            ImGui::InputInt("Sync Offset", &sd.sync_offset, 1, 1e1);
+            ImGui::InputInt("U Value ", &sd.zadoff_chu_u, 1, 10);
 
             ImGui::SeparatorText("DSP Module");
             if (ImGui::Button(cfo_correct, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sh_data.flags.cfo_cor = !sh_data.flags.cfo_cor;
+                sd.flags.cfo_cor = !sd.flags.cfo_cor;
 
             if (ImGui::Button(equal_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sh_data.flags.equal = !sh_data.flags.equal;
+                sd.flags.equal = !sd.flags.equal;
 
             ImGui::SeparatorText("Pre Modulation");
-            switch (sh_data.modul_type_TX)
+            switch (sd.modul_type_TX)
             {
             case ModulationType::BPSK:
                 modulation_type = "Modulation: BPSK";
@@ -434,47 +434,48 @@ void run_gui(sharedData &sh_data)
             ImGui::SetNextItemWidth(-FLT_MIN);
             if (ImGui::BeginCombo("##Modulation Type", modulation_type))
             {
-                if (ImGui::Selectable("BPSK", sh_data.modul_type_TX == ModulationType::BPSK))
+                if (ImGui::Selectable("BPSK", sd.modul_type_TX == ModulationType::BPSK))
                 {
-                    sh_data.modul_type_TX = ModulationType::BPSK;
-                    sh_data.flags.changed_modulation_type = true;
+                    sd.modul_type_TX = ModulationType::BPSK;
+                    sd.flags.changed_modulation_type = true;
                 }
-                if (ImGui::Selectable("QPSK", sh_data.modul_type_TX == ModulationType::QPSK))
+                if (ImGui::Selectable("QPSK", sd.modul_type_TX == ModulationType::QPSK))
                 {
-                    sh_data.modul_type_TX = ModulationType::QPSK;
-                    sh_data.flags.changed_modulation_type = true;
+                    sd.modul_type_TX = ModulationType::QPSK;
+                    sd.flags.changed_modulation_type = true;
                 }
-                if (ImGui::Selectable("QAM16", sh_data.modul_type_TX == ModulationType::QAM16))
+                if (ImGui::Selectable("QAM16", sd.modul_type_TX == ModulationType::QAM16))
                 {
-                    sh_data.modul_type_TX = ModulationType::QAM16;
-                    sh_data.flags.changed_modulation_type = true;
+                    sd.modul_type_TX = ModulationType::QAM16;
+                    sd.flags.changed_modulation_type = true;
                 }
-                if (ImGui::Selectable("QAM64", sh_data.modul_type_TX == ModulationType::QAM64))
+                if (ImGui::Selectable("QAM64", sd.modul_type_TX == ModulationType::QAM64))
                 {
-                    sh_data.modul_type_TX = ModulationType::QAM64;
-                    sh_data.flags.changed_modulation_type = true;
+                    sd.modul_type_TX = ModulationType::QAM64;
+                    sd.flags.changed_modulation_type = true;
                 }
-                if (ImGui::Selectable("QAM256", sh_data.modul_type_TX == ModulationType::QAM256))
+                if (ImGui::Selectable("QAM256", sd.modul_type_TX == ModulationType::QAM256))
                 {
-                    sh_data.modul_type_TX = ModulationType::QAM256;
-                    sh_data.flags.changed_modulation_type = true;
+                    sd.modul_type_TX = ModulationType::QAM256;
+                    sd.flags.changed_modulation_type = true;
                 }
                 ImGui::EndCombo();
             }
 
-            ImGui::InputInt("Cycle Prefix", &sh_data.cyclic_prefex, 1);
-            ImGui::InputInt("Subcarrier", &sh_data.subcarrier, 1);
-            ImGui::SliderInt("Pilots", &sh_data.cnt_pilots, 1, 100);
+            ImGui::InputInt("Cycle Prefix", &sd.cyclic_prefex, 1);
+            ImGui::InputInt("Subcarrier", &sd.subcarrier, 1);
+            if (ImGui::SliderInt("Pilots", &sd.cnt_pilots, 1, 100))
+                sd.flags.pilots_change = true;
 
             ImGui::SeparatorText("SDR Configuration");
             ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::BeginCombo("##SDR Device", sh_data.device.c_str()))
+            if (ImGui::BeginCombo("##SDR Device", sd.device.c_str()))
             {
-                for (const auto &dev : sh_data.devices)
+                for (const auto &dev : sd.devices)
                 {
-                    bool is_selected = (sh_data.device == dev);
+                    bool is_selected = (sd.device == dev);
                     if (ImGui::Selectable(dev.c_str(), is_selected))
-                        sh_data.device = dev;
+                        sd.device = dev;
                     if (is_selected)
                         ImGui::SetItemDefaultFocus();
                 }
@@ -483,82 +484,82 @@ void run_gui(sharedData &sh_data)
 
             if (ImGui::Button("RX Mode", ImVec2(ImGui::GetContentRegionAvail().x / 2, 0.0f)))
             {
-                sh_data.flags.get_zadoff_pos = !sh_data.flags.get_zadoff_pos;
-                sh_data.flags.rx_gain_mode = !sh_data.flags.rx_gain_mode;
-                sh_data.flags.changed_rx_gain_mode = true;
-                sh_data.tx_gain = 0.0f;
-                sh_data.flags.cfo_cor = !sh_data.flags.cfo_cor;
-                sh_data.flags.equal = !sh_data.flags.equal;
-                sh_data.flags.debug = !sh_data.flags.debug;
+                sd.flags.get_zadoff_pos = !sd.flags.get_zadoff_pos;
+                sd.flags.rx_gain_mode = !sd.flags.rx_gain_mode;
+                sd.flags.changed_rx_gain_mode = true;
+                sd.tx_gain = 0.0f;
+                sd.flags.cfo_cor = !sd.flags.cfo_cor;
+                sd.flags.equal = !sd.flags.equal;
+                sd.flags.debug = !sd.flags.debug;
             }
 
             ImGui::SameLine();
 
             if (ImGui::Button("TX Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
             {
-                sh_data.flags.changed_send = !sh_data.flags.changed_send;
-                sh_data.flags.changed_pss_symbols = !sh_data.flags.changed_pss_symbols;
-                sh_data.flags.get_zadoff_pos = !sh_data.flags.get_zadoff_pos;
-                sh_data.flags.rx_gain_mode = !sh_data.flags.rx_gain_mode;
-                sh_data.flags.changed_rx_gain_mode = true;
-                sh_data.tx_gain = 89.0f;
-                sh_data.flags.cfo_cor = !sh_data.flags.cfo_cor;
-                sh_data.flags.equal = !sh_data.flags.equal;
-                sh_data.flags.debug = !sh_data.flags.debug;
+                sd.flags.changed_send = !sd.flags.changed_send;
+                sd.flags.changed_pss_symbols = !sd.flags.changed_pss_symbols;
+                sd.flags.get_zadoff_pos = !sd.flags.get_zadoff_pos;
+                sd.flags.rx_gain_mode = !sd.flags.rx_gain_mode;
+                sd.flags.changed_rx_gain_mode = true;
+                sd.tx_gain = 89.0f;
+                sd.flags.cfo_cor = !sd.flags.cfo_cor;
+                sd.flags.equal = !sd.flags.equal;
+                sd.flags.debug = !sd.flags.debug;
             }
 
-            if (ImGui::DragFloat("RX Gain", &sh_data.rx_gain, 0.25f, 0.f, 73.f))
+            if (ImGui::DragFloat("RX Gain", &sd.rx_gain, 0.25f, 0.f, 73.f))
             {
-                sh_data.flags.changed_rx_gain = true;
-                sh_data.flags.rx_gain_mode = false;
-                sh_data.flags.changed_rx_gain_mode = true;
+                sd.flags.changed_rx_gain = true;
+                sd.flags.rx_gain_mode = false;
+                sd.flags.changed_rx_gain_mode = true;
             }
             ImGui::SameLine();
-            bool rx_gain_mode = sh_data.flags.rx_gain_mode;
+            bool rx_gain_mode = sd.flags.rx_gain_mode;
             if (ImGui::Checkbox("AGC", &rx_gain_mode))
             {
-                sh_data.flags.rx_gain_mode = rx_gain_mode;
-                sh_data.flags.changed_rx_gain_mode = true;
+                sd.flags.rx_gain_mode = rx_gain_mode;
+                sd.flags.changed_rx_gain_mode = true;
             }
 
-            if (ImGui::DragFloat("TX Gain", &sh_data.tx_gain, 0.25f, 0.f, 89.f))
-                sh_data.flags.changed_tx_gain = true;
+            if (ImGui::DragFloat("TX Gain", &sd.tx_gain, 0.25f, 0.f, 89.f))
+                sd.flags.changed_tx_gain = true;
 
-            if (ImGui::InputFloat("RX Frequency", &sh_data.rx_frequency, 1e3, 1e4))
-                sh_data.flags.changed_rx_freq = true;
+            if (ImGui::InputFloat("RX Frequency", &sd.rx_frequency, 1e3, 1e4))
+                sd.flags.changed_rx_freq = true;
 
-            if (ImGui::InputFloat("TX Frequency", &sh_data.tx_frequency, 1e3, 1e4))
-                sh_data.flags.changed_tx_freq = true;
+            if (ImGui::InputFloat("TX Frequency", &sd.tx_frequency, 1e3, 1e4))
+                sd.flags.changed_tx_freq = true;
 
             if (ImGui::SliderInt("RX Bandwidth", &cur_rx_bandwidth, 0, bandwidths.size() - 1,
                                  std::to_string(bandwidths[cur_rx_bandwidth]).c_str()))
             {
-                sh_data.rx_bandwidth = bandwidths[cur_rx_bandwidth];
-                sh_data.flags.changed_rx_bandwidth = true;
+                sd.rx_bandwidth = bandwidths[cur_rx_bandwidth];
+                sd.flags.changed_rx_bandwidth = true;
             }
 
             if (ImGui::SliderInt("TX Bandwidth", &cur_tx_bandwidth, 0, bandwidths.size() - 1,
                                  std::to_string(bandwidths[cur_tx_bandwidth]).c_str()))
             {
-                sh_data.tx_bandwidth = bandwidths[cur_tx_bandwidth];
-                sh_data.flags.changed_tx_bandwidth = true;
+                sd.tx_bandwidth = bandwidths[cur_tx_bandwidth];
+                sd.flags.changed_tx_bandwidth = true;
             }
 
-            if (ImGui::InputFloat("Sample Rate", &sh_data.sample_rate, 1e5, 1e6))
-                sh_data.flags.changed_sample_rate = true;
+            if (ImGui::InputFloat("Sample Rate", &sd.sample_rate, 1e5, 1e6))
+                sd.flags.changed_sample_rate = true;
 
             if (ImGui::Button("Open Message Editor", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
-                sh_data.flags.show_input_window = true;
+                sd.flags.show_input_window = true;
 
-            if (sh_data.flags.show_input_window)
+            if (sd.flags.show_input_window)
             {
-                ImGui::Begin("Input Message", &sh_data.flags.show_input_window);
+                ImGui::Begin("Input Message", &sd.flags.show_input_window);
 
-                if (ImGui::InputText("Text", sh_data.input_buffer, 256))
-                    sh_data.message = sh_data.input_buffer;
+                if (ImGui::InputText("Text", sd.input_buffer, 256))
+                    sd.message = sd.input_buffer;
 
                 if (ImGui::Button("Close"))
-                    sh_data.flags.show_input_window = false;
+                    sd.flags.show_input_window = false;
 
                 ImGui::End();
             }

@@ -30,4 +30,4 @@ class SDRDevice
     ~SDRDevice();
 };
 
-void run_sdr(std::stop_token stoken, sharedData &sh_data);
+void run_sdr(std::stop_token stoken, sharedData &sd);
