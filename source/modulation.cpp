@@ -454,8 +454,10 @@ std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> 
     std::vector<std::complex<float>> corrected(signal.size());
     for (size_t n = 0; n < signal.size(); n++)
     {
-        float phase = -2 * M_PI * delta_f * n / fs;
-        corrected[n] = signal[n] * std::complex<float>(std::cos(phase), std::sin(phase));
+        corrected[n] = signal[n] * std::polar(1.0f, sd.current_phase);
+        sd.current_phase -= 2 * M_PI * delta_f / fs;
+        if (sd.current_phase < -M_PI) sd.current_phase += 2 * M_PI;
+        if (sd.current_phase > M_PI)  sd.current_phase -= 2 * M_PI;
     }
 
     return corrected;

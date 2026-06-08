@@ -113,19 +113,6 @@ void run_dsp(std::stop_token stoken, sharedData &sd)
             rx_local.assign(sd.rx_complex.begin(), sd.rx_complex.end());
         }
 
-        if (sd.flags.get_zadoff_pos_loopback)
-        {
-            split_to_float(rx_local.data(), signal_re.data(), signal_im.data(), signal_re.size());
-            zad_of_idx = zadoff_sync(signal_re.data(), signal_im.data(), signal_re.size(), zc_re.data(), zc_im.data(), zc_re.size(),
-                                        sd.zadoff_corr_arr.data());
-
-            if (zad_of_idx > sd.mtu)
-                zad_of_idx = sd.mtu;
-
-            sd.sync_pos = zad_of_idx - sd.sync_offset;
-            sd.flags.get_zadoff_pos_loopback = false;
-        }
-
         if (sd.flags.get_zadoff_pos)
         {
             split_to_float(rx_local.data(), signal_re.data(), signal_im.data(), signal_re.size());

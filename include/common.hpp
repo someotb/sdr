@@ -64,6 +64,7 @@ struct sharedData
     float sample_rate = 1.92e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
+    float current_phase = 0.0f;
     int cyclic_prefex = 32;
     int subcarrier = 128;
     int sync_pos = 0;
@@ -92,9 +93,7 @@ struct sharedData
         std::atomic<bool> changed_rx_bandwidth = false;
         std::atomic<bool> changed_tx_bandwidth = false;
         std::atomic<bool> changed_modulation_type = false;
-        std::atomic<bool> changed_pss_symbols = false;
         std::atomic<bool> changed_cont_time = true;
-        std::atomic<bool> get_zadoff_pos_loopback = false;
         std::atomic<bool> get_zadoff_pos = false;
         std::atomic<bool> rm_pilots = false;
         std::atomic<bool> debug = false;

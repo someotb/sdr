@@ -372,7 +372,6 @@ void run_gui(sharedData &sd)
 
             const char *label_time = sd.flags.changed_cont_time ? "Programm | Running" : "Programm | Stopped";
             const char *sdr_mode = sd.flags.changed_send ? "SDR Mode | Transmission" : "SDR Mode | Receiving";
-            const char *pss_mode = sd.flags.changed_pss_symbols ? "PSS Symbol [ON]" : "PSS Symbol [OFF]";
             const char *zadoff_chu = sd.flags.get_zadoff_pos ? "Direct Mode [ON]" : "Direct Mode [OFF]";
             const char *cfo_correct = sd.flags.cfo_cor ? "CFO Correction [ON]" : "CFO Correction [OFF]";
             const char *equal_mode = sd.flags.equal ? "Equalization [ON]" : "Equalization [OFF]";
@@ -383,9 +382,6 @@ void run_gui(sharedData &sd)
 
             if (ImGui::Button(sdr_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                 sd.flags.changed_send = !sd.flags.changed_send;
-
-            if (ImGui::Button(pss_mode, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sd.flags.changed_pss_symbols = !sd.flags.changed_pss_symbols;
 
             ImGui::SameLine();
 
@@ -399,8 +395,6 @@ void run_gui(sharedData &sd)
                 sd.flags.bits_cnt_change = true;
 
             ImGui::SeparatorText("ZadOff-Chu");
-            if (ImGui::Button("Loopback Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
-                sd.flags.get_zadoff_pos_loopback = !sd.flags.get_zadoff_pos_loopback;
             if (ImGui::Button(zadoff_chu, ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
                 sd.flags.get_zadoff_pos = !sd.flags.get_zadoff_pos;
             ImGui::InputInt("Sync Pos", &sd.sync_pos, 1, 1e1);
@@ -501,7 +495,6 @@ void run_gui(sharedData &sd)
             if (ImGui::Button("TX Mode", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
             {
                 sd.flags.changed_send = !sd.flags.changed_send;
-                sd.flags.changed_pss_symbols = !sd.flags.changed_pss_symbols;
                 sd.flags.get_zadoff_pos = !sd.flags.get_zadoff_pos;
                 sd.flags.rx_gain_mode = !sd.flags.rx_gain_mode;
                 sd.flags.changed_rx_gain_mode = true;
