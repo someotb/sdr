@@ -92,12 +92,10 @@ void run_sdr(std::stop_token stoken, sharedData &sd)
             continue;
         }
 
-        std::vector<int16_t> local_tx(sd.mtu * 2);
+        std::vector<int16_t> local_tx(sd.buffer);
         {
             std::lock_guard<std::mutex> lock(sd.sync.tx_mutex);
-            auto &src = sd.flags.one_time_mode ?
-                sd.tx_buffer_one_time : sd.tx_buffer;
-            std::copy(src.begin(), src.begin() + sd.mtu * 2, local_tx.begin());
+            std::copy(sd.tx_buffer.begin(), sd.tx_buffer.begin() + sd.buffer, local_tx.begin());
         }
 
         void *tx_buffs[] = {local_tx.data()};
