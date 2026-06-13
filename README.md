@@ -30,6 +30,7 @@ mkdir build && cd build
 cmake ../
 make -j\`nproc\` # nproc - количество потоков, например make -j16 
 sudo make install
+sudo ldconfig
 ```
 
 #### libad9361-iio
