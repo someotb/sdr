@@ -21,6 +21,59 @@ git submodule update --init --recursive
 4) SoapyPlutoSDR
 ```
 
+#### libiio
+```bash
+git clone --branch v0.24 https://github.com/TelecomDep/libiio.git
+
+cd libiio
+mkdir build && cd build
+cmake ../
+make -j\`nproc\` # nproc - количество потоков, например make -j16 
+sudo make install
+```
+
+#### libad9361-iio
+```bash
+git clone --branch v0.3 https://github.com/TelecomDep/libad9361-iio.git
+cd libad9361-iio
+
+mkdir build && cd build
+
+cmake ../
+
+make -j\`nproc\` # nproc - количество потоков, например make -j16 
+sudo make install
+sudo ldconfig
+```
+
+#### SoapySDR
+```bash
+git clone --branch soapy-sdr-0.8.1 https://github.com/TelecomDep/SoapySDR.git
+
+cd SoapySDR
+mkdir build && cd build
+
+cmake ../
+
+make -j\`nproc\` # nproc - количество потоков, например make -j16 
+sudo make install
+sudo ldconfig
+```
+
+#### SoapyPlutoSDR
+```bash
+git clone --branch sdr_gadget_timestamping https://github.com/TelecomDep/SoapyPlutoSDR.git
+cd SoapyPlutoSDR
+
+mkdir build && cd build
+
+cmake ../
+
+make -j\`nproc\` # nproc - количество потоков, например make -j16 
+sudo make install
+sudo ldconfig
+```
+
 После сборки и установки библиотеки в систему, нужно обновлять зависимости:
 ```bash
 sudo ldconfig
