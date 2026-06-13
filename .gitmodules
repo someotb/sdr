@@ -5,15 +5,3 @@
 	path = third_party/imgui
 	url = https://github.com/ocornut/imgui.git
 	branch = docking
-[submodule "third_party/SoapyPlutoSDR"]
-	path = third_party/SoapyPlutoSDR
-	url = https://github.com/pothosware/SoapyPlutoSDR.git
-[submodule "third_party/SoapySDR"]
-	path = third_party/SoapySDR
-	url = https://github.com/pothosware/SoapySDR.git
-[submodule "third_party/libiio"]
-	path = third_party/libiio
-	url = https://github.com/analogdevicesinc/libiio.git
-[submodule "third_party/libad9361-iio"]
-	path = third_party/libad9361-iio
-	url = https://github.com/analogdevicesinc/libad9361-iio.git
