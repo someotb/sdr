@@ -59,8 +59,8 @@ struct sharedData
 
     float rx_gain = 20.f;
     float tx_gain = 80.f;
-    float rx_frequency = 2.8e9;
-    float tx_frequency = 2.8e9;
+    float rx_frequency = 2.2e9;
+    float tx_frequency = 2.2e9;
     float sample_rate = 1.92e6;
     float rx_bandwidth = 1e6;
     float tx_bandwidth = 1e6;
