@@ -51,3 +51,4 @@ reboot
 **На случай ошибки:**  `ssh-keygen -f “/home/<user>/.ssh/known_hosts” -R “192.168.2.1”`
 
 > [Оригинальная статья](https://nicoskin.notion.site/PlutoSDR-6e3f0880417f4927895cffa93ca2cf50)
+> [Репозиторий с отчетом по производственной практике](https://github.com/someotb/sdr_reports)
